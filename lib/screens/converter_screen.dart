@@ -213,7 +213,18 @@ class _ConverterScreenState extends State<ConverterScreen> {
                 const SizedBox(height: 16),
                 SettingsPanel(
                   settings: _settings,
-                  onSettingsChanged: (s) => setState(() => _settings = s),
+                  onSettingsChanged: (s) => setState(() {
+                    _settings = s;
+                    for (final job in _jobs) {
+                      if (job.status == ConversionJobStatus.done ||
+                          job.status == ConversionJobStatus.error) {
+                        job.status = ConversionJobStatus.pending;
+                        job.progress = 0;
+                        job.statusText = '';
+                        job.errorMessage = null;
+                      }
+                    }
+                  }),
                   enabled: !_isConverting,
                 ),
 
