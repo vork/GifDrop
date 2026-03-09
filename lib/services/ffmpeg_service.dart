@@ -85,6 +85,40 @@ class FfmpegService {
     return 0;
   }
 
+  /// Build the pre-processing filter chain (fps, scale, boomerang).
+  /// Returns the chain as a string. For use in both palette and GIF passes.
+  String _buildPreFilters(ConversionSettings settings) {
+    final parts = <String>[];
+    parts.add('fps=${settings.fps}');
+    if (settings.width != null) {
+      parts.add('scale=${settings.width}:-2:flags=lanczos');
+    }
+    return parts.join(',');
+  }
+
+  /// Build the boomerang portion of the filter graph.
+  /// [inputLabel] is the label of the stream to process (e.g. empty for -vf, or a named label).
+  /// Returns (filterGraph, outputLabel) where outputLabel is the named stream to continue with.
+  String _buildBoomerangFilter(ConversionSettings settings) {
+    if (!settings.isBoomerang) return '';
+
+    if (settings.loopMode == LoopMode.boomerang) {
+      // Forward + backward, with duplicate frames at junction
+      // split → reverse → concat
+      return 'split[fwd][rev];[rev]reverse[rev2];[fwd][rev2]concat=n=2:v=1';
+    } else {
+      // Seamless: trim first frame of reversed (duplicate of last forward frame)
+      // and trim last frame of reversed (duplicate of first forward frame for loop point)
+      // Triple-reverse trick to trim last frame without knowing count:
+      //   reverse → trim start_frame=1 → reverse → trim start_frame=1 → reverse
+      return 'split[fwd][rev];'
+          '[rev]reverse,trim=start_frame=1,setpts=PTS-STARTPTS,'
+          'reverse,trim=start_frame=1,setpts=PTS-STARTPTS,'
+          'reverse,setpts=PTS-STARTPTS[rev2];'
+          '[fwd][rev2]concat=n=2:v=1';
+    }
+  }
+
   Future<String> _generatePalette(
     String inputPath,
     ConversionSettings settings,
@@ -93,17 +127,20 @@ class FfmpegService {
   }) async {
     final ffmpeg = await ffmpegPath;
 
-    final filters = <String>[];
-    filters.add('fps=${settings.fps}');
-    if (settings.width != null) {
-      filters.add('scale=${settings.width}:-2:flags=lanczos');
-    }
     final statsMode = settings.useLocalColorTables ? 'diff' : 'full';
-    filters.add('palettegen=stats_mode=$statsMode');
+    final preFilters = _buildPreFilters(settings);
+
+    String vf;
+    if (settings.isBoomerang) {
+      final boomerang = _buildBoomerangFilter(settings);
+      vf = '$preFilters,$boomerang,palettegen=stats_mode=$statsMode';
+    } else {
+      vf = '$preFilters,palettegen=stats_mode=$statsMode';
+    }
 
     final args = [
       '-i', inputPath,
-      '-vf', filters.join(','),
+      '-vf', vf,
       '-y', palettePath,
     ];
 
@@ -125,11 +162,7 @@ class FfmpegService {
   }) async {
     final ffmpeg = await ffmpegPath;
 
-    final scaleAndFps = <String>[];
-    scaleAndFps.add('fps=${settings.fps}');
-    if (settings.width != null) {
-      scaleAndFps.add('scale=${settings.width}:-2:flags=lanczos');
-    }
+    final preFilters = _buildPreFilters(settings);
 
     final paletteOpts = StringBuffer('paletteuse=dither=${settings.ditherMode}');
     if (settings.ditherMode == 'bayer') {
@@ -139,14 +172,22 @@ class FfmpegService {
       paletteOpts.write(':diff_mode=rectangle:new=1');
     }
 
-    final filterComplex =
-        '${scaleAndFps.join(',')} [x]; [x][1:v] $paletteOpts';
+    String filterComplex;
+    if (settings.isBoomerang) {
+      final boomerang = _buildBoomerangFilter(settings);
+      filterComplex =
+          '$preFilters,$boomerang [x]; [x][1:v] $paletteOpts';
+    } else {
+      filterComplex = '$preFilters [x]; [x][1:v] $paletteOpts';
+    }
+
+    final loopFlag = settings.isLoop ? '0' : '-1';
 
     final args = [
       '-i', inputPath,
       '-i', palettePath,
       '-lavfi', filterComplex,
-      '-loop', settings.loop ? '0' : '-1',
+      '-loop', loopFlag,
       '-y', outputPath,
     ];
 
@@ -216,13 +257,16 @@ class FfmpegService {
       onProgress(0.05, 'Generating color palette...');
       await _generatePalette(inputPath, settings, palettePath, cancelSignal: cancelSignal);
 
+      // Boomerang modes roughly double the effective duration for progress tracking
+      final effectiveDuration = settings.isBoomerang ? duration * 2 : duration;
+
       onProgress(0.1, 'Creating GIF...');
       await _createGif(
         inputPath,
         palettePath,
         outputPath,
         settings,
-        duration,
+        effectiveDuration,
         (p, s) => onProgress(0.1 + p * 0.8, s),
         cancelSignal: cancelSignal,
       );

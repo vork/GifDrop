@@ -37,17 +37,10 @@ class SettingsPanel extends StatelessWidget {
             _buildSectionTitle(theme, 'Frame Rate (FPS)'),
             const SizedBox(height: 8),
             _buildFpsSelector(theme),
+            const SizedBox(height: 16),
+            _buildSectionTitle(theme, 'Loop Mode'),
             const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Loop GIF'),
-              subtitle: const Text('Repeat animation (off = play once)'),
-              value: settings.loop,
-              onChanged: enabled
-                  ? (v) => onSettingsChanged(settings.copyWith(loop: v))
-                  : null,
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
+            _buildLoopModeSelector(theme),
             const SizedBox(height: 8),
             ExpansionTile(
               initiallyExpanded: true,
@@ -116,6 +109,26 @@ class SettingsPanel extends StatelessWidget {
               ? (_) => onSettingsChanged(settings.copyWith(fps: fps))
               : null,
           visualDensity: VisualDensity.compact,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildLoopModeSelector(ThemeData theme) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: LoopMode.values.map((mode) {
+        final isSelected = settings.loopMode == mode;
+
+        return ChoiceChip(
+          label: Text(ConversionSettings.loopModeLabel(mode)),
+          selected: isSelected,
+          onSelected: enabled
+              ? (_) => onSettingsChanged(settings.copyWith(loopMode: mode))
+              : null,
+          visualDensity: VisualDensity.compact,
+          tooltip: ConversionSettings.loopModeDescription(mode),
         );
       }).toList(),
     );

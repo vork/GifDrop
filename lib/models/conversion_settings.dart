@@ -1,7 +1,14 @@
+enum LoopMode {
+  none,
+  loop,
+  boomerang,
+  boomerangSeamless,
+}
+
 class ConversionSettings {
   final int? width;
   final int fps;
-  final bool loop;
+  final LoopMode loopMode;
   final bool useLocalColorTables;
   final String ditherMode;
   final int bayerScale;
@@ -11,7 +18,7 @@ class ConversionSettings {
   const ConversionSettings({
     this.width,
     this.fps = 15,
-    this.loop = true,
+    this.loopMode = LoopMode.loop,
     this.useLocalColorTables = true,
     this.ditherMode = 'bayer',
     this.bayerScale = 3,
@@ -19,10 +26,14 @@ class ConversionSettings {
     this.lossyLevel = 40,
   });
 
+  bool get isLoop => loopMode != LoopMode.none;
+  bool get isBoomerang =>
+      loopMode == LoopMode.boomerang || loopMode == LoopMode.boomerangSeamless;
+
   ConversionSettings copyWith({
     int? Function()? width,
     int? fps,
-    bool? loop,
+    LoopMode? loopMode,
     bool? useLocalColorTables,
     String? ditherMode,
     int? bayerScale,
@@ -32,7 +43,7 @@ class ConversionSettings {
     return ConversionSettings(
       width: width != null ? width() : this.width,
       fps: fps ?? this.fps,
-      loop: loop ?? this.loop,
+      loopMode: loopMode ?? this.loopMode,
       useLocalColorTables: useLocalColorTables ?? this.useLocalColorTables,
       ditherMode: ditherMode ?? this.ditherMode,
       bayerScale: bayerScale ?? this.bayerScale,
@@ -40,6 +51,32 @@ class ConversionSettings {
           enableLossyCompression ?? this.enableLossyCompression,
       lossyLevel: lossyLevel ?? this.lossyLevel,
     );
+  }
+
+  static String loopModeLabel(LoopMode mode) {
+    switch (mode) {
+      case LoopMode.none:
+        return 'No loop (play once)';
+      case LoopMode.loop:
+        return 'Loop';
+      case LoopMode.boomerang:
+        return 'Boomerang';
+      case LoopMode.boomerangSeamless:
+        return 'Boomerang (seamless)';
+    }
+  }
+
+  static String loopModeDescription(LoopMode mode) {
+    switch (mode) {
+      case LoopMode.none:
+        return 'Play once and stop';
+      case LoopMode.loop:
+        return 'Repeat forward';
+      case LoopMode.boomerang:
+        return 'Forward then backward';
+      case LoopMode.boomerangSeamless:
+        return 'Forward then backward, no duplicate frames at edges';
+    }
   }
 
   static const List<int?> widthPresets = [
