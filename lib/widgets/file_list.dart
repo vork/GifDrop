@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import '../models/conversion_job.dart';
 
@@ -35,7 +36,11 @@ class FileList extends StatelessWidget {
           children: [
             Text(
               'Files (${jobs.length})',
-              style: theme.textTheme.titleSmall,
+              style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
             const Spacer(),
             if (jobs.isNotEmpty)
@@ -139,7 +144,8 @@ class FileList extends StatelessWidget {
                         if (job.status == ConversionJobStatus.pending)
                           Text(
                             'Pending',
-                            style: theme.textTheme.bodySmall?.copyWith(
+                            style: GoogleFonts.staatliches(
+                              fontSize: 13,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),

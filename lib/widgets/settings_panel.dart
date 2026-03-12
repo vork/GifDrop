@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/conversion_settings.dart';
 
 class SettingsPanel extends StatelessWidget {
@@ -51,7 +52,9 @@ class SettingsPanel extends StatelessWidget {
               childrenPadding: const EdgeInsets.only(top: 8),
               title: Text(
                 'Optimization',
-                style: theme.textTheme.titleSmall?.copyWith(
+                style: GoogleFonts.dmSans(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                   color: theme.colorScheme.onSurface,
                 ),
               ),
@@ -68,7 +71,9 @@ class SettingsPanel extends StatelessWidget {
   Widget _buildSectionTitle(ThemeData theme, String title) {
     return Text(
       title,
-      style: theme.textTheme.labelLarge?.copyWith(
+      style: GoogleFonts.dmSans(
+        fontWeight: FontWeight.w700,
+        fontSize: 14,
         color: theme.colorScheme.onSurfaceVariant,
       ),
     );
@@ -135,11 +140,26 @@ class SettingsPanel extends StatelessWidget {
   }
 
   Widget _buildOptimizationSection(ThemeData theme) {
+    final boldLabel = GoogleFonts.dmSans(
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+      color: theme.colorScheme.onSurface,
+    );
+    final subtitleStyle = GoogleFonts.dmSans(
+      fontSize: 12,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final interactiveStyle = GoogleFonts.staatliches(
+      fontSize: 14,
+      color: theme.colorScheme.onSurface,
+    );
+
     return Column(
       children: [
         SwitchListTile(
-          title: const Text('Local color tables'),
-          subtitle: const Text('Per-frame palettes (better quality, larger)'),
+          title: Text('Local color tables', style: boldLabel),
+          subtitle: Text('Per-frame palettes (better quality, larger)',
+              style: subtitleStyle),
           value: settings.useLocalColorTables,
           onChanged: enabled
               ? (v) => onSettingsChanged(
@@ -151,11 +171,13 @@ class SettingsPanel extends StatelessWidget {
         const SizedBox(height: 4),
         Row(
           children: [
-            const Text('Dither: '),
-            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Dither:', style: boldLabel),
+            ),
             Expanded(
               child: DropdownButtonFormField<String>(
                 initialValue: settings.ditherMode,
+                style: interactiveStyle,
                 decoration: const InputDecoration(
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
@@ -186,25 +208,33 @@ class SettingsPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Text('Bayer scale: '),
               Expanded(
-                child: Slider(
-                  value: settings.bayerScale.toDouble(),
-                  min: 0,
-                  max: 5,
-                  divisions: 5,
-                  label: '${settings.bayerScale}',
-                  onChanged: enabled
-                      ? (v) => onSettingsChanged(
-                          settings.copyWith(bayerScale: v.toInt()))
-                      : null,
-                ),
+                child: Text('Bayer scale:', style: boldLabel),
               ),
-              SizedBox(
-                width: 20,
-                child: Text(
-                  '${settings.bayerScale}',
-                  style: theme.textTheme.bodySmall,
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Slider(
+                        value: settings.bayerScale.toDouble(),
+                        min: 0,
+                        max: 5,
+                        divisions: 5,
+                        label: '${settings.bayerScale}',
+                        onChanged: enabled
+                            ? (v) => onSettingsChanged(
+                                settings.copyWith(bayerScale: v.toInt()))
+                            : null,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        '${settings.bayerScale}',
+                        style: interactiveStyle,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -212,8 +242,9 @@ class SettingsPanel extends StatelessWidget {
         ],
         const SizedBox(height: 4),
         SwitchListTile(
-          title: const Text('Lossy compression'),
-          subtitle: const Text('Reduce file size with gifsicle'),
+          title: Text('Lossy compression', style: boldLabel),
+          subtitle:
+              Text('Reduce file size with gifsicle', style: subtitleStyle),
           value: settings.enableLossyCompression,
           onChanged: enabled
               ? (v) => onSettingsChanged(
@@ -225,31 +256,36 @@ class SettingsPanel extends StatelessWidget {
         if (settings.enableLossyCompression) ...[
           Row(
             children: [
-              Text(
-                'Level: ',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const Text('Light'),
               Expanded(
-                child: Slider(
-                  value: settings.lossyLevel.toDouble(),
-                  min: 30,
-                  max: 200,
-                  divisions: 17,
-                  label: '${settings.lossyLevel}',
-                  onChanged: enabled
-                      ? (v) => onSettingsChanged(
-                          settings.copyWith(lossyLevel: v.toInt()))
-                      : null,
-                ),
+                child: Text('Level:', style: boldLabel),
               ),
-              const Text('Heavy'),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 32,
-                child: Text(
-                  '${settings.lossyLevel}',
-                  style: theme.textTheme.bodySmall,
+              Expanded(
+                child: Row(
+                  children: [
+                    Text('Light', style: subtitleStyle),
+                    Expanded(
+                      child: Slider(
+                        value: settings.lossyLevel.toDouble(),
+                        min: 30,
+                        max: 200,
+                        divisions: 17,
+                        label: '${settings.lossyLevel}',
+                        onChanged: enabled
+                            ? (v) => onSettingsChanged(
+                                settings.copyWith(lossyLevel: v.toInt()))
+                            : null,
+                      ),
+                    ),
+                    Text('Heavy', style: subtitleStyle),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 32,
+                      child: Text(
+                        '${settings.lossyLevel}',
+                        style: interactiveStyle,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

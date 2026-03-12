@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/conversion_settings.dart';
 import '../models/conversion_job.dart';
 import '../services/ffmpeg_service.dart';
@@ -146,7 +147,25 @@ class _ConverterScreenState extends State<ConverterScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GifDrop'),
+        toolbarHeight: 48,
+        title: Padding(
+          padding: EdgeInsets.only(left: Platform.isMacOS ? 60 : 0),
+          child: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment(-0.38, -0.92),
+              end: Alignment(0.38, 0.92),
+              colors: [Color(0xFFF59E0C), Color(0xFFFF4E50)],
+            ).createShader(bounds),
+            child: Text(
+              'GifDrop',
+              style: GoogleFonts.dmSans(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
         centerTitle: false,
         actions: [
           if (_jobs.isNotEmpty) ...[
