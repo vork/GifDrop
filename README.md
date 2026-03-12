@@ -1,5 +1,7 @@
 # GifDrop
 
+![Banner](imgs/GifDropBanner.jpg)
+
 **GifDrop** is a desktop app that converts video to GIF and optimizes existing GIFs. Drag and drop your files, tweak quality and size, and export—no command line required. It bundles **ffmpeg** (video→GIF) and **gifsicle** (GIF optimization) so you don’t need to install anything else.
 
 Built with Flutter for **macOS** (Apple Silicon), **Linux**, and **Windows**.
