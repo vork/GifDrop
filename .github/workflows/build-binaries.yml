@@ -116,6 +116,32 @@ jobs:
           name: binaries-macos-arm64
           path: binary-out/
 
+      # ── Code-signing certificate ─────────────────────────────────
+      - name: Import code-signing certificate
+        if: env.MACOS_CERTIFICATE_P12 != ''
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_FILE=$(mktemp /tmp/cert.XXXXXX.p12)
+          KEYCHAIN_FILE=$(mktemp /tmp/keychain.XXXXXX.keychain-db)
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 20)
+
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERT_FILE"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_FILE"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security import "$CERT_FILE" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_FILE"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security list-keychains -d user -s "$KEYCHAIN_FILE" $(security list-keychains -d user | tr -d '"')
+
+          echo "KEYCHAIN_FILE=$KEYCHAIN_FILE" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+          rm -f "$CERT_FILE"
+
       # ── Flutter app build ────────────────────────────────────────
       - uses: subosito/flutter-action@v2
         with:
@@ -132,20 +158,87 @@ jobs:
       - name: Build macOS app
         run: flutter build macos --release
 
+      # ── Code-sign & notarize ────────────────────────────────────
+      - name: Codesign app bundle
+        if: env.MACOS_CERTIFICATE_P12 != ''
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERT_NAME: ${{ secrets.MACOS_CERT_NAME }}
+        run: |
+          APP_DIR="build/macos/Build/Products/Release"
+          APP_NAME=$(ls -d "$APP_DIR"/*.app | head -1)
+          ENTITLEMENTS="macos/Runner/Release.entitlements"
+
+          # Sign bundled CLI tools (ffmpeg, gifsicle) with hardened runtime
+          codesign --force --options runtime \
+            --sign "$CERT_NAME" \
+            "$APP_NAME/Contents/Resources/ffmpeg" \
+            "$APP_NAME/Contents/Resources/gifsicle"
+
+          # Sign all embedded frameworks and dylibs
+          find "$APP_NAME/Contents/Frameworks" -type f \( -name "*.dylib" -o -perm +111 \) | while read lib; do
+            codesign --force --options runtime \
+              --sign "$CERT_NAME" \
+              --entitlements "$ENTITLEMENTS" "$lib"
+          done
+
+          find "$APP_NAME/Contents/Frameworks" -name "*.framework" -type d | while read fw; do
+            codesign --force --options runtime \
+              --sign "$CERT_NAME" \
+              --entitlements "$ENTITLEMENTS" "$fw"
+          done
+
+          # Sign the main app bundle
+          codesign --force --options runtime \
+            --sign "$CERT_NAME" \
+            --entitlements "$ENTITLEMENTS" \
+            "$APP_NAME"
+
+          # Verify
+          codesign --verify --deep --strict --verbose=2 "$APP_NAME"
+
+      - name: Notarize app
+        if: env.MACOS_CERTIFICATE_P12 != '' && env.APPLE_ID != ''
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP_DIR="build/macos/Build/Products/Release"
+          APP_NAME=$(ls -d "$APP_DIR"/*.app | head -1)
+
+          # Create zip for notarization submission
+          ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" notarize-upload.zip
+
+          # Submit for notarization and wait
+          xcrun notarytool submit notarize-upload.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait --timeout 30m
+
+          # Staple the notarization ticket to the app
+          xcrun stapler staple "$APP_NAME"
+
+          rm -f notarize-upload.zip
+
       - name: Package macOS app
         run: |
           cd build/macos/Build/Products/Release
-          # Find the .app (name may vary)
           APP_NAME=$(ls -d *.app | head -1)
           echo "Found app: $APP_NAME"
-          # Verify binaries made it into the bundle
           ls -la "$APP_NAME/Contents/Resources/ffmpeg" \
                  "$APP_NAME/Contents/Resources/gifsicle"
           "$APP_NAME/Contents/Resources/ffmpeg" -version 2>&1 | head -1
           "$APP_NAME/Contents/Resources/gifsicle" --version 2>&1 | head -1
-          # Create distributable zip
           ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" \
                 GifDrop-macos-arm64.zip
+
+      # ── Clean up keychain ───────────────────────────────────────
+      - name: Clean up keychain
+        if: always() && env.KEYCHAIN_FILE != ''
+        run: security delete-keychain "$KEYCHAIN_FILE" || true
 
       - uses: actions/upload-artifact@v4
         with:
