@@ -267,13 +267,16 @@ jobs:
         run: cp -R build-cache/ffmpeg-install build-cache/gifsicle .
 
       # ── System deps ──────────────────────────────────────────────
-      - name: Install build dependencies
-        if: steps.restore-build.outputs.cache-hit != 'true'
+      - name: Install Flutter build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y nasm yasm build-essential autoconf automake \
-            libtool pkg-config libgtk-3-dev ninja-build \
-            clang cmake libblkid-dev liblzma-dev
+          sudo apt-get install -y libgtk-3-dev ninja-build \
+            clang cmake pkg-config libblkid-dev liblzma-dev
+
+      - name: Install native build dependencies
+        if: steps.restore-build.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y nasm yasm build-essential autoconf automake libtool
 
       # ── ffmpeg from source ───────────────────────────────────────
       - name: Download & verify ffmpeg source
