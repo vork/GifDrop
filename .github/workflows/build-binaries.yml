@@ -12,8 +12,7 @@ on:
 env:
   FFMPEG_VERSION: "7.1.1"
   FFMPEG_TARBALL_SHA256: "733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1"
-  GIFSICLE_VERSION: "1.96"
-  GIFSICLE_TAG: "v1.96"
+  GIFSKI_VERSION: "1.34.0"
   FLUTTER_VERSION: "3.41.0"
 
 jobs:
@@ -25,23 +24,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # https://github.com/actions/cache | https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching
-      - name: Restore ffmpeg/gifsicle build cache
+      - name: Restore ffmpeg/gifski build cache
         uses: actions/cache@v4
         id: restore-build
         with:
-          key: ffmpeg-gifsicle-macos-${{ env.FFMPEG_VERSION }}-${{ env.GIFSICLE_VERSION }}
+          key: ffmpeg-gifski-macos-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}
           path: build-cache
 
       - name: Use restored binaries
         if: steps.restore-build.outputs.cache-hit == 'true'
         run: |
-          cp -R build-cache/ffmpeg-install build-cache/gifsicle .
+          cp -R build-cache/ffmpeg-install build-cache/gifski .
 
       # ── System deps ──────────────────────────────────────────────
       - name: Install build dependencies
         if: steps.restore-build.outputs.cache-hit != 'true'
         run: brew install nasm automake autoconf libtool pkg-config
+
+      # ── Rust toolchain ─────────────────────────────────────────────
+      - name: Install Rust toolchain
+        if: steps.restore-build.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
 
       # ── ffmpeg from source ───────────────────────────────────────
       - name: Download & verify ffmpeg source
@@ -82,34 +85,29 @@ jobs:
           ./ffmpeg-install/bin/ffmpeg -version
           file ./ffmpeg-install/bin/ffmpeg
 
-      # ── gifsicle from source ─────────────────────────────────────
-      - name: Clone & build gifsicle
+      # ── gifski shared library from source ──────────────────────────
+      - name: Clone & build gifski (shared library)
         if: steps.restore-build.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch "${GIFSICLE_TAG}" https://github.com/kohler/gifsicle.git
-          cd gifsicle
-          autoreconf -i
-          ./configure --disable-gifview
-          make -j$(sysctl -n hw.ncpu)
-          ./src/gifsicle --version
+          git clone --depth 1 --branch "${GIFSKI_VERSION}" https://github.com/ImageOptim/gifski.git
+          cd gifski
+          cargo build --release
+          file target/release/libgifski.dylib
 
       - name: Prepare build cache
         if: steps.restore-build.outputs.cache-hit != 'true'
         run: |
           mkdir -p build-cache
-          cp -R ffmpeg-install gifsicle build-cache/
+          cp -R ffmpeg-install gifski build-cache/
 
       # ── Binary checksums ─────────────────────────────────────────
       - name: Compute binary checksums
         run: |
           mkdir -p binary-out
           cp ffmpeg-install/bin/ffmpeg binary-out/ffmpeg
-          cp gifsicle/src/gifsicle binary-out/gifsicle
-          chmod +x binary-out/*
-          cd binary-out && shasum -a 256 ffmpeg gifsicle | tee checksums.sha256
-
-      - name: Archive gifsicle source (GPL compliance)
-        run: tar czf binary-out/gifsicle-${GIFSICLE_VERSION}-source.tar.gz -C gifsicle .
+          cp gifski/target/release/libgifski.dylib binary-out/libgifski.dylib
+          chmod +x binary-out/ffmpeg
+          cd binary-out && shasum -a 256 ffmpeg libgifski.dylib | tee checksums.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -153,8 +151,8 @@ jobs:
         run: |
           mkdir -p macos/Runner/Resources
           cp ffmpeg-install/bin/ffmpeg macos/Runner/Resources/ffmpeg
-          cp gifsicle/src/gifsicle macos/Runner/Resources/gifsicle
-          chmod +x macos/Runner/Resources/ffmpeg macos/Runner/Resources/gifsicle
+          cp gifski/target/release/libgifski.dylib macos/Runner/Resources/libgifski.dylib
+          chmod +x macos/Runner/Resources/ffmpeg
 
       - name: Build macOS app
         run: flutter build macos --release
@@ -170,11 +168,11 @@ jobs:
           APP_NAME=$(ls -d "$APP_DIR"/*.app | head -1)
           ENTITLEMENTS="macos/Runner/Release.entitlements"
 
-          # Sign bundled CLI tools (ffmpeg, gifsicle) with hardened runtime
+          # Sign bundled CLI tools and shared libraries with hardened runtime
           codesign --force --options runtime \
             --sign "$CERT_NAME" \
             "$APP_NAME/Contents/Resources/ffmpeg" \
-            "$APP_NAME/Contents/Resources/gifsicle"
+            "$APP_NAME/Contents/Resources/libgifski.dylib"
 
           # Sign all embedded frameworks and dylibs
           find "$APP_NAME/Contents/Frameworks" -type f \( -name "*.dylib" -o -perm +111 \) | while read lib; do
@@ -230,9 +228,9 @@ jobs:
           APP_NAME=$(ls -d *.app | head -1)
           echo "Found app: $APP_NAME"
           ls -la "$APP_NAME/Contents/Resources/ffmpeg" \
-                 "$APP_NAME/Contents/Resources/gifsicle"
+                 "$APP_NAME/Contents/Resources/libgifski.dylib"
           "$APP_NAME/Contents/Resources/ffmpeg" -version 2>&1 | head -1
-          "$APP_NAME/Contents/Resources/gifsicle" --version 2>&1 | head -1
+          file "$APP_NAME/Contents/Resources/libgifski.dylib"
           ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" \
                 GifDrop-macos-arm64.zip
 
@@ -254,17 +252,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # https://github.com/actions/cache | https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching
-      - name: Restore ffmpeg/gifsicle build cache
+      - name: Restore ffmpeg/gifski build cache
         uses: actions/cache@v4
         id: restore-build
         with:
-          key: ffmpeg-gifsicle-linux-${{ env.FFMPEG_VERSION }}-${{ env.GIFSICLE_VERSION }}
+          key: ffmpeg-gifski-linux-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}
           path: build-cache
 
       - name: Use restored binaries
         if: steps.restore-build.outputs.cache-hit == 'true'
-        run: cp -R build-cache/ffmpeg-install build-cache/gifsicle .
+        run: cp -R build-cache/ffmpeg-install build-cache/gifski .
 
       # ── System deps ──────────────────────────────────────────────
       - name: Install Flutter build dependencies
@@ -277,6 +274,11 @@ jobs:
         if: steps.restore-build.outputs.cache-hit != 'true'
         run: |
           sudo apt-get install -y nasm yasm build-essential autoconf automake libtool
+
+      # ── Rust toolchain ─────────────────────────────────────────────
+      - name: Install Rust toolchain
+        if: steps.restore-build.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
 
       # ── ffmpeg from source ───────────────────────────────────────
       - name: Download & verify ffmpeg source
@@ -314,34 +316,29 @@ jobs:
           file ./ffmpeg-install/bin/ffmpeg
           ldd ./ffmpeg-install/bin/ffmpeg || echo "(static binary)"
 
-      # ── gifsicle from source ─────────────────────────────────────
-      - name: Clone & build gifsicle
+      # ── gifski shared library from source ──────────────────────────
+      - name: Clone & build gifski (shared library)
         if: steps.restore-build.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch "${GIFSICLE_TAG}" https://github.com/kohler/gifsicle.git
-          cd gifsicle
-          autoreconf -i
-          ./configure --disable-gifview LDFLAGS="-static"
-          make -j$(nproc)
-          ./src/gifsicle --version
+          git clone --depth 1 --branch "${GIFSKI_VERSION}" https://github.com/ImageOptim/gifski.git
+          cd gifski
+          cargo build --release
+          file target/release/libgifski.so
 
       - name: Prepare build cache
         if: steps.restore-build.outputs.cache-hit != 'true'
         run: |
           mkdir -p build-cache
-          cp -R ffmpeg-install gifsicle build-cache/
+          cp -R ffmpeg-install gifski build-cache/
 
       # ── Binary checksums ─────────────────────────────────────────
       - name: Compute binary checksums
         run: |
           mkdir -p binary-out
           cp ffmpeg-install/bin/ffmpeg binary-out/ffmpeg
-          cp gifsicle/src/gifsicle binary-out/gifsicle
-          chmod +x binary-out/*
-          cd binary-out && sha256sum ffmpeg gifsicle | tee checksums.sha256
-
-      - name: Archive gifsicle source (GPL compliance)
-        run: tar czf binary-out/gifsicle-${GIFSICLE_VERSION}-source.tar.gz -C gifsicle .
+          cp gifski/target/release/libgifski.so binary-out/libgifski.so
+          chmod +x binary-out/ffmpeg
+          cd binary-out && sha256sum ffmpeg libgifski.so | tee checksums.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -360,13 +357,14 @@ jobs:
       - name: Inject binaries into Linux bundle
         run: |
           BUNDLE="build/linux/x64/release/bundle"
-          # BinaryResolver looks for <exec>/lib/{ffmpeg,gifsicle}
+          # BinaryResolver looks for <exec>/lib/ffmpeg
+          # GifskiLibrary looks for <exec>/lib/libgifski.so
           cp ffmpeg-install/bin/ffmpeg "${BUNDLE}/lib/ffmpeg"
-          cp gifsicle/src/gifsicle    "${BUNDLE}/lib/gifsicle"
-          chmod +x "${BUNDLE}/lib/ffmpeg" "${BUNDLE}/lib/gifsicle"
+          cp gifski/target/release/libgifski.so "${BUNDLE}/lib/libgifski.so"
+          chmod +x "${BUNDLE}/lib/ffmpeg"
           # Verify
           "${BUNDLE}/lib/ffmpeg" -version 2>&1 | head -1
-          "${BUNDLE}/lib/gifsicle" --version 2>&1 | head -1
+          file "${BUNDLE}/lib/libgifski.so"
 
       - name: Package Linux app
         run: |
@@ -386,15 +384,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # https://github.com/actions/cache | https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching
-      - name: Restore ffmpeg/gifsicle build cache
+      - name: Restore ffmpeg/gifski build cache
         uses: actions/cache@v4
         id: restore-build
         with:
-          key: ffmpeg-gifsicle-windows-${{ env.FFMPEG_VERSION }}-${{ env.GIFSICLE_VERSION }}
+          key: ffmpeg-gifski-windows-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}
           path: build-cache
 
-      # ── Build ffmpeg + gifsicle in MSYS2 ─────────────────────────
+      # ── Build ffmpeg in MSYS2 ───────────────────────────────────
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -409,7 +406,7 @@ jobs:
       - name: Use restored binaries
         if: steps.restore-build.outputs.cache-hit == 'true'
         shell: msys2 {0}
-        run: cp -r build-cache/ffmpeg-install build-cache/gifsicle .
+        run: cp -r build-cache/ffmpeg-install .
 
       - name: Download & verify ffmpeg source
         if: steps.restore-build.outputs.cache-hit != 'true'
@@ -447,33 +444,42 @@ jobs:
         shell: msys2 {0}
         run: ./ffmpeg-install/bin/ffmpeg.exe -version
 
-      - name: Clone & build gifsicle
+      # ── gifski shared library (built with Rust on Windows) ─────────
+      - name: Install Rust toolchain
         if: steps.restore-build.outputs.cache-hit != 'true'
-        shell: msys2 {0}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Clone & build gifski (shared library)
+        if: steps.restore-build.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch "${GIFSICLE_TAG}" https://github.com/kohler/gifsicle.git
-          cd gifsicle
-          autoreconf -i
-          ./configure --disable-gifview
-          make -j$(nproc)
-          ./src/gifsicle.exe --version
+          git clone --depth 1 --branch "$env:GIFSKI_VERSION" https://github.com/ImageOptim/gifski.git
+          cd gifski
+          cargo build --release
+          Get-Item target\release\gifski.dll
+
+      - name: Restore gifski from cache
+        if: steps.restore-build.outputs.cache-hit == 'true'
+        run: |
+          Copy-Item -Recurse build-cache\gifski .
 
       - name: Prepare build cache
         if: steps.restore-build.outputs.cache-hit != 'true'
         shell: msys2 {0}
-        run: mkdir -p build-cache && cp -r ffmpeg-install gifsicle build-cache/
+        run: mkdir -p build-cache && cp -r ffmpeg-install build-cache/
+
+      - name: Prepare gifski build cache
+        if: steps.restore-build.outputs.cache-hit != 'true'
+        run: |
+          New-Item -ItemType Directory -Force -Path build-cache\gifski\target\release | Out-Null
+          Copy-Item gifski\target\release\gifski.dll build-cache\gifski\target\release\gifski.dll
 
       - name: Compute binary checksums
         shell: msys2 {0}
         run: |
           mkdir -p binary-out
           cp ffmpeg-install/bin/ffmpeg.exe binary-out/ffmpeg.exe
-          cp gifsicle/src/gifsicle.exe binary-out/gifsicle.exe
-          cd binary-out && sha256sum ffmpeg.exe gifsicle.exe | tee checksums.sha256
-
-      - name: Archive gifsicle source (GPL compliance)
-        shell: msys2 {0}
-        run: tar czf binary-out/gifsicle-${GIFSICLE_VERSION}-source.tar.gz -C gifsicle .
+          cp gifski/target/release/gifski.dll binary-out/gifski.dll
+          cd binary-out && sha256sum ffmpeg.exe gifski.dll | tee checksums.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -493,13 +499,14 @@ jobs:
         shell: pwsh
         run: |
           $bundle = "build\windows\x64\runner\Release"
-          # BinaryResolver looks for <exec>\data\{ffmpeg.exe,gifsicle.exe}
+          # BinaryResolver looks for <exec>\data\ffmpeg.exe
+          # GifskiLibrary looks for <exec>\data\gifski.dll
           New-Item -ItemType Directory -Force -Path "$bundle\data" | Out-Null
           Copy-Item "ffmpeg-install\bin\ffmpeg.exe" "$bundle\data\ffmpeg.exe"
-          Copy-Item "gifsicle\src\gifsicle.exe"     "$bundle\data\gifsicle.exe"
+          Copy-Item "gifski\target\release\gifski.dll" "$bundle\data\gifski.dll"
           # Verify
           & "$bundle\data\ffmpeg.exe" -version 2>&1 | Select-Object -First 1
-          & "$bundle\data\gifsicle.exe" --version 2>&1 | Select-Object -First 1
+          Get-Item "$bundle\data\gifski.dll"
 
       - name: Package Windows app
         shell: pwsh
@@ -547,12 +554,6 @@ jobs:
             fi
           done
 
-          # GPL compliance: gifsicle source (pick one, they're identical)
-          SOURCE_ARCHIVE=$(find artifacts -name 'gifsicle-*-source.tar.gz' | head -1)
-          if [ -n "$SOURCE_ARCHIVE" ]; then
-            cp "$SOURCE_ARCHIVE" release-assets/gifsicle-${GIFSICLE_VERSION}-source.tar.gz
-          fi
-
           # Combined checksums
           echo "# Binary checksums per platform" > release-assets/checksums.sha256
           for dir in artifacts/binaries-*/; do
@@ -589,7 +590,7 @@ jobs:
 
             ### Bundled binary versions
             - **ffmpeg** ${{ env.FFMPEG_VERSION }} (LGPL 2.1+, built from source)
-            - **gifsicle** ${{ env.GIFSICLE_VERSION }} (GPL 2, source included as `gifsicle-${{ env.GIFSICLE_VERSION }}-source.tar.gz`)
+            - **gifski** ${{ env.GIFSKI_VERSION }} (MIT, built from source)
 
             ### Verification
             All checksums are in `checksums.sha256`. Verify after download:
@@ -603,5 +604,4 @@ jobs:
             release-assets/binaries-macos-arm64.tar.gz
             release-assets/binaries-linux-x86_64.tar.gz
             release-assets/binaries-windows-x86_64.tar.gz
-            release-assets/gifsicle-${{ env.GIFSICLE_VERSION }}-source.tar.gz
             release-assets/checksums.sha256
