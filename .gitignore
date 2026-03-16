@@ -46,4 +46,4 @@ app.*.map.json
 
 # Bundled binaries (built by CI or fetched locally — do not commit)
 macos/Runner/Resources/ffmpeg
-macos/Runner/Resources/gifsicle
+macos/Runner/Resources/libgifski.dylib

@@ -1,7 +1,7 @@
 enum ConversionJobStatus {
   pending,
   converting,
-  optimizing,
+  encoding,
   done,
   error,
 }
@@ -18,6 +18,9 @@ class ConversionJob {
   // Per-video trim (frame-based)
   int? trimStartFrame;
   int? trimEndFrame;
+
+  // Source video fps (probed on add)
+  double? sourceFps;
 
   // Per-video crop (pixel-based)
   int? cropX;

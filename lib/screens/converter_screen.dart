@@ -27,13 +27,33 @@ class _ConverterScreenState extends State<ConverterScreen> {
   final _ffmpegService = FfmpegService();
 
   void _addFiles(List<String> paths) {
+    final newJobs = <ConversionJob>[];
     setState(() {
       for (final path in paths) {
         if (!_jobs.any((j) => j.inputPath == path)) {
-          _jobs.add(ConversionJob(inputPath: path));
+          final job = ConversionJob(inputPath: path);
+          _jobs.add(job);
+          newJobs.add(job);
         }
       }
     });
+    // Probe source fps for new files in background
+    for (final job in newJobs) {
+      _probeSourceFps(job);
+    }
+  }
+
+  Future<void> _probeSourceFps(ConversionJob job) async {
+    try {
+      final info = await _ffmpegService.getVideoInfo(job.inputPath);
+      if (mounted) {
+        setState(() {
+          job.sourceFps = info.fps;
+        });
+      }
+    } catch (_) {
+      // Non-critical — fps capping will still work during conversion
+    }
   }
 
   void _removeJob(int index) {
@@ -96,8 +116,8 @@ class _ConverterScreenState extends State<ConverterScreen> {
             setState(() {
               job.progress = progress;
               job.statusText = status;
-              if (status.contains('lossy') || status.contains('Optimiz')) {
-                job.status = ConversionJobStatus.optimizing;
+              if (status.contains('Encoding')) {
+                job.status = ConversionJobStatus.encoding;
               }
             });
           },
@@ -171,6 +191,17 @@ class _ConverterScreenState extends State<ConverterScreen> {
     }
   }
 
+  /// Minimum source fps across all loaded videos (null if unknown).
+  double? get _minSourceFps {
+    double? min;
+    for (final job in _jobs) {
+      if (job.sourceFps != null) {
+        min = min == null ? job.sourceFps! : (job.sourceFps! < min ? job.sourceFps! : min);
+      }
+    }
+    return min;
+  }
+
   int get _pendingCount =>
       _jobs.where((j) => j.status != ConversionJobStatus.done).length;
 
@@ -242,10 +273,10 @@ class _ConverterScreenState extends State<ConverterScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 700),
+            constraints: const BoxConstraints(maxWidth: 740),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -260,12 +291,14 @@ class _ConverterScreenState extends State<ConverterScreen> {
                     onRemove: _isConverting ? (_) {} : _removeJob,
                     onEdit: _isConverting ? (_) {} : _openEditDialog,
                     onClearAll: _isConverting ? () {} : _clearAll,
+                    targetFps: _settings.fps,
                   ),
                 ],
 
                 const SizedBox(height: 16),
                 SettingsPanel(
                   settings: _settings,
+                  minSourceFps: _minSourceFps,
                   onSettingsChanged: (s) => setState(() {
                     _settings = s;
                     for (final job in _jobs) {
@@ -291,7 +324,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
                   ),
                 ],
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
               ],
             ),
           ),

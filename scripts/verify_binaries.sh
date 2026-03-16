@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# verify_binaries.sh — Verify bundled ffmpeg/gifsicle binaries.
+# verify_binaries.sh — Verify bundled ffmpeg/libgifski binaries.
 #
 # Usage:
 #   ./scripts/verify_binaries.sh <dir-containing-binaries> [checksums.sha256]
 #
 # What it does:
-#   1. Checks that ffmpeg and gifsicle exist and are executable
-#   2. Prints version output for each
+#   1. Checks that ffmpeg and libgifski exist
+#   2. Prints version/type output for each
 #   3. Computes SHA256 and optionally compares against a checksums file
 #   4. Reports PASS / FAIL
 
@@ -25,39 +25,49 @@ PASS=true
 # Determine binary names based on OS
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
   FFMPEG="ffmpeg.exe"
-  GIFSICLE="gifsicle.exe"
+  GIFSKI_LIB="gifski.dll"
 else
   FFMPEG="ffmpeg"
-  GIFSICLE="gifsicle"
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    GIFSKI_LIB="libgifski.dylib"
+  else
+    GIFSKI_LIB="libgifski.so"
+  fi
 fi
 
 echo "=== Verifying binaries in ${BIN_DIR} ==="
 echo ""
 
-# ── Existence & executability ──────────────────────────────────────
-for bin in "$FFMPEG" "$GIFSICLE"; do
+# ── Existence ──────────────────────────────────────────────────────
+for bin in "$FFMPEG" "$GIFSKI_LIB"; do
   path="${BIN_DIR}/${bin}"
   if [[ ! -f "$path" ]]; then
     echo -e "${RED}FAIL${NC}: ${bin} not found at ${path}"
     PASS=false
     continue
   fi
-  if [[ ! -x "$path" ]]; then
-    echo -e "${YELLOW}WARN${NC}: ${bin} exists but is not executable, attempting chmod +x"
-    chmod +x "$path"
-  fi
-  echo -e "${GREEN}  OK${NC}: ${bin} found and executable"
+  echo -e "${GREEN}  OK${NC}: ${bin} found"
 done
 
 echo ""
 
-# ── Version output ─────────────────────────────────────────────────
+# ── Version / type output ─────────────────────────────────────────
 echo "--- ffmpeg version ---"
-"${BIN_DIR}/${FFMPEG}" -version 2>&1 | head -3 || { echo -e "${RED}FAIL${NC}: could not run ffmpeg"; PASS=false; }
+if [[ -x "${BIN_DIR}/${FFMPEG}" ]]; then
+  "${BIN_DIR}/${FFMPEG}" -version 2>&1 | head -3 || { echo -e "${RED}FAIL${NC}: could not run ffmpeg"; PASS=false; }
+else
+  echo -e "${RED}FAIL${NC}: ffmpeg not executable"
+  PASS=false
+fi
 
 echo ""
-echo "--- gifsicle version ---"
-"${BIN_DIR}/${GIFSICLE}" --version 2>&1 | head -3 || { echo -e "${RED}FAIL${NC}: could not run gifsicle"; PASS=false; }
+echo "--- libgifski type ---"
+if [[ -f "${BIN_DIR}/${GIFSKI_LIB}" ]]; then
+  file "${BIN_DIR}/${GIFSKI_LIB}"
+else
+  echo -e "${RED}FAIL${NC}: libgifski not found"
+  PASS=false
+fi
 
 echo ""
 
@@ -66,7 +76,7 @@ echo "--- SHA256 hashes ---"
 SHASUM_CMD="shasum -a 256"
 command -v sha256sum >/dev/null 2>&1 && SHASUM_CMD="sha256sum"
 
-for bin in "$FFMPEG" "$GIFSICLE"; do
+for bin in "$FFMPEG" "$GIFSKI_LIB"; do
   path="${BIN_DIR}/${bin}"
   [[ -f "$path" ]] && $SHASUM_CMD "$path"
 done

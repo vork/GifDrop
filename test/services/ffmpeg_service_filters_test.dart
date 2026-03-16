@@ -15,28 +15,28 @@ void main() {
       final job = ConversionJob(inputPath: '/v.mp4');
       const settings = ConversionSettings();
       final result = service.buildPreFilters(settings, job);
-      expect(result, 'fps=15');
+      expect(result, 'fps=30');
     });
 
     test('includes scale when width is set', () {
       final job = ConversionJob(inputPath: '/v.mp4');
       const settings = ConversionSettings(width: 640);
       final result = service.buildPreFilters(settings, job);
-      expect(result, 'fps=15,scale=640:-2:flags=lanczos');
+      expect(result, 'fps=30,scale=640:-2:flags=lanczos');
     });
 
     test('includes trim when start frame is set', () {
       final job = ConversionJob(inputPath: '/v.mp4', trimStartFrame: 10);
       const settings = ConversionSettings();
       final result = service.buildPreFilters(settings, job);
-      expect(result, 'trim=start_frame=10,setpts=PTS-STARTPTS,fps=15');
+      expect(result, 'trim=start_frame=10,setpts=PTS-STARTPTS,fps=30');
     });
 
     test('includes trim when end frame is set', () {
       final job = ConversionJob(inputPath: '/v.mp4', trimEndFrame: 100);
       const settings = ConversionSettings();
       final result = service.buildPreFilters(settings, job);
-      expect(result, 'trim=end_frame=100,setpts=PTS-STARTPTS,fps=15');
+      expect(result, 'trim=end_frame=100,setpts=PTS-STARTPTS,fps=30');
     });
 
     test('includes trim with both start and end', () {
@@ -45,7 +45,7 @@ void main() {
       const settings = ConversionSettings();
       final result = service.buildPreFilters(settings, job);
       expect(result,
-          'trim=start_frame=10:end_frame=100,setpts=PTS-STARTPTS,fps=15');
+          'trim=start_frame=10:end_frame=100,setpts=PTS-STARTPTS,fps=30');
     });
 
     test('includes crop when crop fields are set', () {
@@ -58,14 +58,14 @@ void main() {
       );
       const settings = ConversionSettings();
       final result = service.buildPreFilters(settings, job);
-      expect(result, 'fps=15,crop=640:480:50:100');
+      expect(result, 'fps=30,crop=640:480:50:100');
     });
 
     test('crop uses iw/ih when width/height not set', () {
       final job = ConversionJob(inputPath: '/v.mp4', cropX: 10);
       const settings = ConversionSettings();
       final result = service.buildPreFilters(settings, job);
-      expect(result, 'fps=15,crop=iw:ih:10:0');
+      expect(result, 'fps=30,crop=iw:ih:10:0');
     });
 
     test('full pipeline: trim + fps + scale + crop', () {
@@ -86,6 +86,14 @@ void main() {
         'fps=24,scale=640:-2:flags=lanczos,'
         'crop=320:240:0:0',
       );
+    });
+
+    test('effectiveFps overrides settings fps', () {
+      final job = ConversionJob(inputPath: '/v.mp4');
+      const settings = ConversionSettings(fps: 30);
+      final result =
+          service.buildPreFilters(settings, job, effectiveFps: 24);
+      expect(result, 'fps=24');
     });
 
     test('order is trim, fps, scale, crop', () {

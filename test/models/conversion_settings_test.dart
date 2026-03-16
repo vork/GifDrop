@@ -6,13 +6,11 @@ void main() {
     test('default values', () {
       const s = ConversionSettings();
       expect(s.width, isNull);
-      expect(s.fps, 15);
+      expect(s.fps, 30);
       expect(s.loopMode, LoopMode.loop);
-      expect(s.useLocalColorTables, true);
-      expect(s.ditherMode, 'bayer');
-      expect(s.bayerScale, 3);
-      expect(s.enableLossyCompression, false);
-      expect(s.lossyLevel, 40);
+      expect(s.quality, 80);
+      expect(s.motionQuality, isNull);
+      expect(s.speedMode, SpeedMode.normal);
     });
 
     test('isLoop is true for loop mode', () {
@@ -55,21 +53,15 @@ void main() {
           width: 640,
           fps: 24,
           loopMode: LoopMode.boomerang,
-          useLocalColorTables: false,
-          ditherMode: 'none',
-          bayerScale: 5,
-          enableLossyCompression: true,
-          lossyLevel: 100,
+          quality: 75,
+          speedMode: SpeedMode.fast,
         );
         final copy = original.copyWith();
         expect(copy.width, 640);
         expect(copy.fps, 24);
         expect(copy.loopMode, LoopMode.boomerang);
-        expect(copy.useLocalColorTables, false);
-        expect(copy.ditherMode, 'none');
-        expect(copy.bayerScale, 5);
-        expect(copy.enableLossyCompression, true);
-        expect(copy.lossyLevel, 100);
+        expect(copy.quality, 75);
+        expect(copy.speedMode, SpeedMode.fast);
       });
 
       test('can set width to null', () {
@@ -88,6 +80,16 @@ void main() {
         const original = ConversionSettings();
         final copy = original.copyWith(fps: 30);
         expect(copy.fps, 30);
+      });
+
+      test('can set and clear motionQuality', () {
+        const original = ConversionSettings();
+        final withMotion =
+            original.copyWith(motionQuality: () => 80);
+        expect(withMotion.motionQuality, 80);
+        final cleared =
+            withMotion.copyWith(motionQuality: () => null);
+        expect(cleared.motionQuality, isNull);
       });
     });
 
@@ -110,10 +112,76 @@ void main() {
           ConversionSettings.loopModeLabel(LoopMode.boomerang), 'Boomerang');
     });
 
-    test('ditherModeLabel returns correct labels', () {
-      expect(ConversionSettings.ditherModeLabel('bayer'), 'Bayer (ordered)');
-      expect(ConversionSettings.ditherModeLabel('none'), 'None');
-      expect(ConversionSettings.ditherModeLabel('unknown'), 'unknown');
+    test('qualityLabel returns correct labels', () {
+      expect(ConversionSettings.qualityLabel(50), 'Small');
+      expect(ConversionSettings.qualityLabel(70), 'Good');
+      expect(ConversionSettings.qualityLabel(90), 'Best');
+      expect(ConversionSettings.qualityLabel(100), 'Maximum');
+    });
+
+    test('speedModeLabel returns correct labels', () {
+      expect(ConversionSettings.speedModeLabel(SpeedMode.fast), 'Fast');
+      expect(ConversionSettings.speedModeLabel(SpeedMode.normal), 'Normal');
+      expect(
+          ConversionSettings.speedModeLabel(SpeedMode.extra), 'Extra effort');
+    });
+
+    group('quality presets', () {
+      test('matchingPreset detects high preset for defaults', () {
+        const s = ConversionSettings();
+        expect(s.matchingPreset, QualityPreset.high);
+      });
+
+      test('matchingPreset detects each preset', () {
+        for (final preset in QualityPreset.values) {
+          final s = ConversionSettings.fromPreset(preset);
+          expect(s.matchingPreset, preset);
+        }
+      });
+
+      test('matchingPreset returns null for custom settings', () {
+        const s = ConversionSettings(quality: 73);
+        expect(s.matchingPreset, isNull);
+      });
+
+      test('matchingPreset ignores speedMode', () {
+        const s = ConversionSettings(quality: 80, speedMode: SpeedMode.fast);
+        expect(s.matchingPreset, QualityPreset.high);
+      });
+
+      test('applyPreset preserves width, fps, loopMode, speedMode', () {
+        const s = ConversionSettings(
+          width: 640,
+          fps: 24,
+          loopMode: LoopMode.boomerang,
+          speedMode: SpeedMode.extra,
+        );
+        final applied = s.applyPreset(QualityPreset.low);
+        expect(applied.width, 640);
+        expect(applied.fps, 24);
+        expect(applied.loopMode, LoopMode.boomerang);
+        expect(applied.speedMode, SpeedMode.extra);
+        expect(applied.quality, 30);
+        expect(applied.motionQuality, isNull);
+      });
+
+      test('lossless preset sets motionQuality to 100', () {
+        final s = ConversionSettings.fromPreset(QualityPreset.lossless);
+        expect(s.quality, 100);
+        expect(s.motionQuality, 100);
+      });
+
+      test('low preset leaves motionQuality at default', () {
+        final s = ConversionSettings.fromPreset(QualityPreset.low);
+        expect(s.quality, 30);
+        expect(s.motionQuality, isNull);
+      });
+
+      test('medium preset leaves motionQuality at default', () {
+        final s = ConversionSettings.fromPreset(QualityPreset.medium);
+        expect(s.quality, 60);
+        expect(s.motionQuality, isNull);
+      });
     });
   });
 }

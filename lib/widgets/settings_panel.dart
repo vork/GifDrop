@@ -2,17 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/conversion_settings.dart';
 
-class SettingsPanel extends StatelessWidget {
+class SettingsPanel extends StatefulWidget {
   final ConversionSettings settings;
   final void Function(ConversionSettings) onSettingsChanged;
   final bool enabled;
+
+  /// Minimum source video fps across loaded files (null if no files or unknown).
+  final double? minSourceFps;
 
   const SettingsPanel({
     super.key,
     required this.settings,
     required this.onSettingsChanged,
     this.enabled = true,
+    this.minSourceFps,
   });
+
+  @override
+  State<SettingsPanel> createState() => _SettingsPanelState();
+}
+
+class _SettingsPanelState extends State<SettingsPanel> {
+  bool _showAdvanced = false;
 
   @override
   Widget build(BuildContext context) {
@@ -42,26 +53,12 @@ class SettingsPanel extends StatelessWidget {
             _buildSectionTitle(theme, 'Loop Mode'),
             const SizedBox(height: 8),
             _buildLoopModeSelector(theme),
+            const SizedBox(height: 16),
+            _buildSectionTitle(theme, 'Quality Preset'),
             const SizedBox(height: 8),
-            ExpansionTile(
-              initiallyExpanded: true,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(top: 8),
-              title: Text(
-                'Optimization',
-                style: GoogleFonts.dmSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              children: [
-                _buildOptimizationSection(theme),
-              ],
-            ),
+            _buildQualityPresetSelector(theme),
+            const SizedBox(height: 8),
+            _buildAdvancedSection(theme),
           ],
         ),
       ),
@@ -84,15 +81,15 @@ class SettingsPanel extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: ConversionSettings.widthPresets.map((width) {
-        final isSelected = settings.width == width;
+        final isSelected = widget.settings.width == width;
         final label = width == null ? 'Original' : '$width';
 
         return ChoiceChip(
           label: Text(label),
           selected: isSelected,
-          onSelected: enabled
-              ? (_) =>
-                  onSettingsChanged(settings.copyWith(width: () => width))
+          onSelected: widget.enabled
+              ? (_) => widget
+                  .onSettingsChanged(widget.settings.copyWith(width: () => width))
               : null,
           visualDensity: VisualDensity.compact,
         );
@@ -101,21 +98,41 @@ class SettingsPanel extends StatelessWidget {
   }
 
   Widget _buildFpsSelector(ThemeData theme) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: ConversionSettings.fpsPresets.map((fps) {
-        final isSelected = settings.fps == fps;
+    final isCapped = widget.minSourceFps != null &&
+        widget.settings.fps > widget.minSourceFps!.round();
+    final cappedFps = widget.minSourceFps?.round();
 
-        return ChoiceChip(
-          label: Text('$fps'),
-          selected: isSelected,
-          onSelected: enabled
-              ? (_) => onSettingsChanged(settings.copyWith(fps: fps))
-              : null,
-          visualDensity: VisualDensity.compact,
-        );
-      }).toList(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: ConversionSettings.fpsPresets.map((fps) {
+            final isSelected = widget.settings.fps == fps;
+
+            return ChoiceChip(
+              label: Text('$fps'),
+              selected: isSelected,
+              onSelected: widget.enabled
+                  ? (_) =>
+                      widget.onSettingsChanged(widget.settings.copyWith(fps: fps))
+                  : null,
+              visualDensity: VisualDensity.compact,
+            );
+          }).toList(),
+        ),
+        if (isCapped) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Will use $cappedFps fps (source video limit)',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -124,13 +141,14 @@ class SettingsPanel extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: LoopMode.values.map((mode) {
-        final isSelected = settings.loopMode == mode;
+        final isSelected = widget.settings.loopMode == mode;
 
         return ChoiceChip(
           label: Text(ConversionSettings.loopModeLabel(mode)),
           selected: isSelected,
-          onSelected: enabled
-              ? (_) => onSettingsChanged(settings.copyWith(loopMode: mode))
+          onSelected: widget.enabled
+              ? (_) => widget
+                  .onSettingsChanged(widget.settings.copyWith(loopMode: mode))
               : null,
           visualDensity: VisualDensity.compact,
           tooltip: ConversionSettings.loopModeDescription(mode),
@@ -139,7 +157,38 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildOptimizationSection(ThemeData theme) {
+  Widget _buildQualityPresetSelector(ThemeData theme) {
+    final activePreset = widget.settings.matchingPreset;
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        ...QualityPreset.values.map((preset) {
+          final isSelected = activePreset == preset;
+          return ChoiceChip(
+            label: Text(ConversionSettings.qualityPresetLabel(preset)),
+            selected: isSelected,
+            onSelected: widget.enabled
+                ? (_) => widget
+                    .onSettingsChanged(widget.settings.applyPreset(preset))
+                : null,
+            visualDensity: VisualDensity.compact,
+            tooltip: ConversionSettings.qualityPresetDescription(preset),
+          );
+        }),
+        if (activePreset == null)
+          const ChoiceChip(
+            label: Text('Custom'),
+            selected: true,
+            onSelected: null,
+            visualDensity: VisualDensity.compact,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAdvancedSection(ThemeData theme) {
     final boldLabel = GoogleFonts.dmSans(
       fontWeight: FontWeight.w700,
       fontSize: 14,
@@ -154,183 +203,171 @@ class SettingsPanel extends StatelessWidget {
       color: theme.colorScheme.onSurface,
     );
 
-    return Column(
+    return ExpansionTile(
+      initiallyExpanded: _showAdvanced,
+      onExpansionChanged: (expanded) {
+        setState(() => _showAdvanced = expanded);
+      },
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(top: 8),
+      title: Text(
+        'Advanced',
+        style: GoogleFonts.dmSans(
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
       children: [
+        // Quality slider
         Row(
           children: [
             Expanded(
-              child: Text('Color palette size:', style: boldLabel),
+              child: Text('Quality:', style: boldLabel),
             ),
             Expanded(
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: ConversionSettings.maxColorsPresets.map((count) {
-                  final isSelected = settings.maxColors == count;
-                  return ChoiceChip(
-                    label: Text('$count'),
-                    selected: isSelected,
-                    onSelected: enabled
-                        ? (_) => onSettingsChanged(
-                            settings.copyWith(maxColors: count))
-                        : null,
-                    visualDensity: VisualDensity.compact,
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        SwitchListTile(
-          title: Text('Local color tables', style: boldLabel),
-          subtitle: Text('Per-frame palettes (better quality, larger)',
-              style: subtitleStyle),
-          value: settings.useLocalColorTables,
-          onChanged: enabled
-              ? (v) => onSettingsChanged(
-                  settings.copyWith(useLocalColorTables: v))
-              : null,
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
-        const SizedBox(height: 4),
-        SwitchListTile(
-          title: Text('Remove duplicate frames', style: boldLabel),
-          subtitle: Text(
-              'Drop near-identical frames to reduce file size',
-              style: subtitleStyle),
-          value: settings.enableDuplicateFrameRemoval,
-          onChanged: enabled
-              ? (v) => onSettingsChanged(
-                  settings.copyWith(enableDuplicateFrameRemoval: v))
-              : null,
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Expanded(
-              child: Text('Dither:', style: boldLabel),
-            ),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: settings.ditherMode,
-                style: interactiveStyle,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+              flex: 2,
+              child: Row(
+                children: [
+                  Text('Small', style: subtitleStyle),
+                  Expanded(
+                    child: Slider(
+                      value: widget.settings.quality.toDouble(),
+                      min: 1,
+                      max: 100,
+                      divisions: 99,
+                      label:
+                          '${widget.settings.quality} (${ConversionSettings.qualityLabel(widget.settings.quality)})',
+                      onChanged: widget.enabled
+                          ? (v) => widget.onSettingsChanged(
+                              widget.settings.copyWith(quality: v.toInt()))
+                          : null,
+                    ),
                   ),
-                  border: OutlineInputBorder(),
-                ),
-                items: ConversionSettings.ditherModes.map((mode) {
-                  return DropdownMenuItem(
-                    value: mode,
-                    child: Text(ConversionSettings.ditherModeLabel(mode)),
-                  );
-                }).toList(),
-                onChanged: enabled
-                    ? (v) {
-                        if (v != null) {
-                          onSettingsChanged(
-                              settings.copyWith(ditherMode: v));
-                        }
-                      }
-                    : null,
+                  Text('Best', style: subtitleStyle),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 32,
+                    child: Text(
+                      '${widget.settings.quality}',
+                      style: interactiveStyle,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        if (settings.ditherMode == 'bayer') ...[
-          const SizedBox(height: 8),
-          Row(
+
+        // Motion quality override — match the Quality slider row height
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
             children: [
-              Expanded(
-                child: Text('Bayer scale:', style: boldLabel),
-              ),
               Expanded(
                 child: Row(
                   children: [
-                    Expanded(
-                      child: Slider(
-                        value: settings.bayerScale.toDouble(),
-                        min: 0,
-                        max: 5,
-                        divisions: 5,
-                        label: '${settings.bayerScale}',
-                        onChanged: enabled
-                            ? (v) => onSettingsChanged(
-                                settings.copyWith(bayerScale: v.toInt()))
-                            : null,
-                      ),
-                    ),
                     SizedBox(
+                      height: 24,
                       width: 24,
-                      child: Text(
-                        '${settings.bayerScale}',
-                        style: interactiveStyle,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 4),
-        SwitchListTile(
-          title: Text('Lossy compression', style: boldLabel),
-          subtitle:
-              Text('Reduce file size with gifsicle', style: subtitleStyle),
-          value: settings.enableLossyCompression,
-          onChanged: enabled
-              ? (v) => onSettingsChanged(
-                  settings.copyWith(enableLossyCompression: v))
-              : null,
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
-        if (settings.enableLossyCompression) ...[
-          Row(
-            children: [
-              Expanded(
-                child: Text('Level:', style: boldLabel),
-              ),
-              Expanded(
-                child: Row(
-                  children: [
-                    Text('Light', style: subtitleStyle),
-                    Expanded(
-                      child: Slider(
-                        value: settings.lossyLevel.toDouble(),
-                        min: 30,
-                        max: 200,
-                        divisions: 17,
-                        label: '${settings.lossyLevel}',
-                        onChanged: enabled
-                            ? (v) => onSettingsChanged(
-                                settings.copyWith(lossyLevel: v.toInt()))
+                      child: Checkbox(
+                        value: widget.settings.motionQuality != null,
+                        onChanged: widget.enabled
+                            ? (checked) {
+                                if (checked == true) {
+                                  widget.onSettingsChanged(
+                                      widget.settings.copyWith(
+                                          motionQuality: () =>
+                                              widget.settings.quality));
+                                } else {
+                                  widget.onSettingsChanged(
+                                      widget.settings.copyWith(
+                                          motionQuality: () => null));
+                                }
+                              }
                             : null,
                       ),
                     ),
-                    Text('Heavy', style: subtitleStyle),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 32,
-                      child: Text(
-                        '${settings.lossyLevel}',
-                        style: interactiveStyle,
-                      ),
-                    ),
+                    const SizedBox(width: 6),
+                    Text('Motion quality:', style: boldLabel),
                   ],
                 ),
               ),
+              Expanded(
+                flex: 2,
+                child: widget.settings.motionQuality != null
+                    ? Row(
+                        children: [
+                          Text('Low', style: subtitleStyle),
+                          Expanded(
+                            child: Slider(
+                              value:
+                                  widget.settings.motionQuality!.toDouble(),
+                              min: 1,
+                              max: 100,
+                              divisions: 99,
+                              label: '${widget.settings.motionQuality}',
+                              onChanged: widget.enabled
+                                  ? (v) => widget.onSettingsChanged(
+                                      widget.settings.copyWith(
+                                          motionQuality: () => v.toInt()))
+                                  : null,
+                            ),
+                          ),
+                          Text('Best', style: subtitleStyle),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 32,
+                            child: Text(
+                              '${widget.settings.motionQuality}',
+                              style: interactiveStyle,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        'Uses quality value',
+                        style: subtitleStyle,
+                      ),
+              ),
             ],
           ),
-        ],
+        ),
+
+        const SizedBox(height: 8),
+
+        // Speed mode
+        Row(
+          children: [
+            Expanded(child: Text('Speed:', style: boldLabel)),
+            Expanded(
+              flex: 2,
+              child: SegmentedButton<SpeedMode>(
+                segments: SpeedMode.values.map((mode) {
+                  return ButtonSegment(
+                    value: mode,
+                    label: Text(ConversionSettings.speedModeLabel(mode)),
+                    tooltip: ConversionSettings.speedModeDescription(mode),
+                  );
+                }).toList(),
+                selected: {widget.settings.speedMode},
+                onSelectionChanged: widget.enabled
+                    ? (v) => widget.onSettingsChanged(
+                        widget.settings.copyWith(speedMode: v.first))
+                    : null,
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: WidgetStatePropertyAll(
+                    GoogleFonts.dmSans(fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

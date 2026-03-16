@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
+import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'binary_resolver.dart';
+import 'gifski_bindings.dart';
+import 'gifski_library.dart';
 import '../models/conversion_job.dart';
 import '../models/conversion_settings.dart';
 
@@ -32,16 +36,10 @@ class VideoInfo {
 
 class FfmpegService {
   String? _ffmpegPath;
-  String? _gifsicklePath;
 
   Future<String> get ffmpegPath async {
     _ffmpegPath ??= await BinaryResolver.resolve('ffmpeg');
     return _ffmpegPath!;
-  }
-
-  Future<String> get gifsicklePath async {
-    _gifsicklePath ??= await BinaryResolver.resolve('gifsicle');
-    return _gifsicklePath!;
   }
 
   /// Run a process, drain stderr, and return (exitCode, stderrText).
@@ -170,11 +168,13 @@ class FfmpegService {
     return 0;
   }
 
-  /// Build the pre-processing filter chain (trim, fps, scale, crop, duplicate removal).
-  /// Returns the chain as a string. For use in both palette and GIF passes.
+  /// Build the pre-processing filter chain (trim, fps, scale, crop).
   /// Per-video trim/crop comes from the [ConversionJob].
+  /// [effectiveFps] overrides `settings.fps` — use to cap at source video fps.
   @visibleForTesting
-  String buildPreFilters(ConversionSettings settings, ConversionJob job) {
+  String buildPreFilters(ConversionSettings settings, ConversionJob job,
+      {int? effectiveFps}) {
+    final fps = effectiveFps ?? settings.fps;
     final parts = <String>[];
 
     // Trim must come first (before any resampling)
@@ -190,14 +190,10 @@ class FfmpegService {
       parts.add('setpts=PTS-STARTPTS');
     }
 
-    parts.add('fps=${settings.fps}');
+    parts.add('fps=$fps');
 
     if (settings.width != null) {
       parts.add('scale=${settings.width}:-2:flags=lanczos');
-    }
-    if (settings.enableDuplicateFrameRemoval) {
-      parts.add('mpdecimate=hi=64*12:lo=64*5:frac=0.33');
-      parts.add('setpts=N/FRAME_RATE/TB');
     }
 
     // Crop after scale so coordinates are relative to output resolution
@@ -213,21 +209,13 @@ class FfmpegService {
   }
 
   /// Build the boomerang portion of the filter graph.
-  /// [inputLabel] is the label of the stream to process (e.g. empty for -vf, or a named label).
-  /// Returns (filterGraph, outputLabel) where outputLabel is the named stream to continue with.
   @visibleForTesting
   String buildBoomerangFilter(ConversionSettings settings) {
     if (!settings.isBoomerang) return '';
 
     if (settings.loopMode == LoopMode.boomerang) {
-      // Forward + backward, with duplicate frames at junction
-      // split → reverse → concat
       return 'split[fwd][rev];[rev]reverse[rev2];[fwd][rev2]concat=n=2:v=1';
     } else {
-      // Seamless: trim first frame of reversed (duplicate of last forward frame)
-      // and trim last frame of reversed (duplicate of first forward frame for loop point)
-      // Triple-reverse trick to trim last frame without knowing count:
-      //   reverse → trim start_frame=1 → reverse → trim start_frame=1 → reverse
       return 'split[fwd][rev];'
           '[rev]reverse,trim=start_frame=1,setpts=PTS-STARTPTS,'
           'reverse,trim=start_frame=1,setpts=PTS-STARTPTS,'
@@ -236,79 +224,35 @@ class FfmpegService {
     }
   }
 
-  Future<String> _generatePalette(
+  /// Extract video frames as individual PNG files into a temp directory.
+  Future<(String frameDir, int frameCount)> _extractFrames(
     String inputPath,
-    ConversionSettings settings,
-    ConversionJob job,
-    String palettePath, {
-    Future<void>? cancelSignal,
-  }) async {
-    final ffmpeg = await ffmpegPath;
-
-    final statsMode = settings.useLocalColorTables ? 'diff' : 'full';
-    final preFilters = buildPreFilters(settings, job);
-    final palettegenOpts = 'palettegen=stats_mode=$statsMode:max_colors=${settings.maxColors}';
-
-    String vf;
-    if (settings.isBoomerang) {
-      final boomerang = buildBoomerangFilter(settings);
-      vf = '$preFilters,$boomerang,$palettegenOpts';
-    } else {
-      vf = '$preFilters,$palettegenOpts';
-    }
-
-    final args = [
-      '-i', inputPath,
-      '-vf', vf,
-      '-y', palettePath,
-    ];
-
-    final (exitCode, stderr) = await _runProcess(ffmpeg, args, cancelSignal: cancelSignal);
-    if (exitCode != 0) {
-      throw Exception('Palette generation failed (exit $exitCode):\n$stderr');
-    }
-    return palettePath;
-  }
-
-  Future<void> _createGif(
-    String inputPath,
-    String palettePath,
-    String outputPath,
     ConversionSettings settings,
     ConversionJob job,
     double totalDuration,
+    int effectiveFps,
     void Function(double progress, String status) onProgress, {
     Future<void>? cancelSignal,
   }) async {
     final ffmpeg = await ffmpegPath;
+    final frameDir = Directory.systemTemp.createTempSync('gifdrop_frames_').path;
 
-    final preFilters = buildPreFilters(settings, job);
-
-    final paletteOpts = StringBuffer('paletteuse=dither=${settings.ditherMode}');
-    if (settings.ditherMode == 'bayer') {
-      paletteOpts.write(':bayer_scale=${settings.bayerScale}');
-    }
-    if (settings.useLocalColorTables) {
-      paletteOpts.write(':diff_mode=rectangle:new=1');
-    }
-
-    String filterComplex;
+    final preFilters =
+        buildPreFilters(settings, job, effectiveFps: effectiveFps);
+    String vf;
     if (settings.isBoomerang) {
       final boomerang = buildBoomerangFilter(settings);
-      filterComplex =
-          '$preFilters,$boomerang [x]; [x][1:v] $paletteOpts';
+      vf = '$preFilters,$boomerang';
     } else {
-      filterComplex = '$preFilters [x]; [x][1:v] $paletteOpts';
+      vf = preFilters;
     }
 
-    final loopFlag = settings.isLoop ? '0' : '-1';
-
+    final framePath = p.join(frameDir, 'frame_%06d.png');
     final args = [
       '-i', inputPath,
-      '-i', palettePath,
-      '-lavfi', filterComplex,
-      '-loop', loopFlag,
-      '-y', outputPath,
+      '-vf', vf,
+      '-vsync', 'vfr',
+      '-y', framePath,
     ];
 
     final timeRegex = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)');
@@ -320,40 +264,134 @@ class FfmpegService {
             int.parse(match.group(2)!) * 60.0 +
             int.parse(match.group(3)!) +
             int.parse(match.group(4)!) / 100.0;
-        final progress = (current / totalDuration).clamp(0.0, 1.0);
-        onProgress(progress, 'Creating GIF...');
+        final effectiveDuration =
+            settings.isBoomerang ? totalDuration * 2 : totalDuration;
+        final progress = (current / effectiveDuration).clamp(0.0, 1.0);
+        onProgress(progress, 'Extracting frames...');
       }
-    },
-        cancelSignal: cancelSignal);
+    }, cancelSignal: cancelSignal);
 
     if (exitCode != 0) {
-      throw Exception('GIF creation failed (exit $exitCode):\n$stderr');
+      throw Exception('Frame extraction failed (exit $exitCode):\n$stderr');
     }
+
+    final frames = Directory(frameDir)
+        .listSync()
+        .where((f) => f.path.endsWith('.png'))
+        .length;
+
+    if (frames == 0) {
+      throw Exception('No frames extracted from video');
+    }
+
+    return (frameDir, frames);
   }
 
-  Future<void> _optimizeWithGifsicle(
-    String gifPath,
+  /// Encode PNG frames into a GIF using gifski via FFI.
+  Future<void> _encodeWithGifski(
+    String frameDir,
+    int frameCount,
+    String outputPath,
     ConversionSettings settings,
+    int effectiveFps,
     void Function(double progress, String status) onProgress, {
     Future<void>? cancelSignal,
   }) async {
-    final gifsicle = await gifsicklePath;
+    final bindings = GifskiLibrary.bindings;
 
-    onProgress(0.0, 'Optimizing with lossy compression...');
+    // Allocate and populate GifskiSettings
+    final settingsPtr = calloc<GifskiSettings>();
+    settingsPtr.ref.width = settings.width ?? 0;
+    settingsPtr.ref.height = 0;
+    settingsPtr.ref.quality = settings.quality;
+    settingsPtr.ref.fast = settings.speedMode == SpeedMode.fast;
+    settingsPtr.ref.repeat = settings.isLoop ? 0 : -1;
 
-    final args = [
-      '--lossy=${settings.lossyLevel}',
-      '-O3',
-      '-b',
-      gifPath,
-    ];
+    final handle = bindings.gifskiNew(settingsPtr);
+    calloc.free(settingsPtr);
 
-    final (exitCode, stderr) = await _runProcess(gifsicle, args, cancelSignal: cancelSignal);
-    if (exitCode != 0) {
-      throw Exception('Gifsicle optimization failed (exit $exitCode):\n$stderr');
+    if (handle == nullptr) {
+      throw Exception('gifski_new returned null — invalid settings');
     }
 
-    onProgress(1.0, 'Optimization complete');
+    var cancelled = false;
+    cancelSignal?.then((_) => cancelled = true);
+
+    var finishCalled = false;
+    try {
+      // Configure optional quality settings
+      if (settings.motionQuality != null) {
+        checkGifskiError(
+          bindings.gifskiSetMotionQuality(handle, settings.motionQuality!),
+          'gifski_set_motion_quality',
+        );
+      }
+      if (settings.speedMode == SpeedMode.extra) {
+        checkGifskiError(
+          bindings.gifskiSetExtraEffort(handle, true),
+          'gifski_set_extra_effort',
+        );
+      }
+
+      // Set output file — this starts the encoder thread, must be before adding frames
+      final outputPathNative = outputPath.toNativeUtf8();
+      checkGifskiError(
+        bindings.gifskiSetFileOutput(handle, outputPathNative),
+        'gifski_set_file_output',
+      );
+      calloc.free(outputPathNative);
+
+      // Collect and sort frame paths
+      final framePaths = Directory(frameDir)
+          .listSync()
+          .where((f) => f.path.endsWith('.png'))
+          .map((f) => f.path)
+          .toList()
+        ..sort();
+
+      // Add frames with presentation timestamps
+      final frameDuration = 1.0 / effectiveFps;
+      for (var i = 0; i < framePaths.length; i++) {
+        if (cancelled) {
+          throw ConversionCancelledException();
+        }
+
+        final pathNative = framePaths[i].toNativeUtf8();
+        final result = bindings.gifskiAddFramePngFile(
+          handle,
+          i,
+          pathNative,
+          i * frameDuration,
+        );
+        calloc.free(pathNative);
+
+        if (result == GifskiError.aborted) {
+          throw ConversionCancelledException();
+        }
+        checkGifskiError(result, 'gifski_add_frame_png_file');
+
+        // Report progress based on frames added
+        onProgress(
+          ((i + 1) / framePaths.length).clamp(0.0, 1.0),
+          'Encoding GIF...',
+        );
+
+        // Yield to allow UI updates and cancel signal processing
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Finalize — does the actual encoding work and frees the handle
+      finishCalled = true;
+      final finishResult = bindings.gifskiFinish(handle);
+      if (finishResult == GifskiError.aborted) {
+        throw ConversionCancelledException();
+      }
+      checkGifskiError(finishResult, 'gifski_finish');
+    } finally {
+      if (!finishCalled) {
+        bindings.gifskiFinish(handle); // free the handle, ignore result
+      }
+    }
   }
 
   Future<String> convertToGif({
@@ -366,11 +404,8 @@ class FfmpegService {
     final outputDir = p.dirname(inputPath);
     final baseName = p.basenameWithoutExtension(inputPath);
     final outputPath = p.join(outputDir, '$baseName.gif');
-    final palettePath = p.join(
-      Directory.systemTemp.path,
-      'gif_palette_${DateTime.now().millisecondsSinceEpoch}.png',
-    );
 
+    String? frameDir;
     try {
       onProgress(0.0, 'Analyzing video...');
       final info = await getVideoInfo(inputPath);
@@ -381,40 +416,42 @@ class FfmpegService {
         job.clampTrim(info.totalFrames);
       }
 
-      onProgress(0.05, 'Generating color palette...');
-      await _generatePalette(inputPath, settings, job, palettePath, cancelSignal: cancelSignal);
+      // Cap output fps at source video fps to avoid duplicate frames
+      final effectiveFps = settings.fps < info.fps.round()
+          ? settings.fps
+          : info.fps.round();
 
-      // Boomerang modes roughly double the effective duration for progress tracking
-      final effectiveDuration = settings.isBoomerang ? duration * 2 : duration;
-
-      onProgress(0.1, 'Creating GIF...');
-      await _createGif(
+      onProgress(0.05, 'Extracting frames...');
+      final (extractedDir, frameCount) = await _extractFrames(
         inputPath,
-        palettePath,
-        outputPath,
         settings,
         job,
-        effectiveDuration,
-        (p, s) => onProgress(0.1 + p * 0.8, s),
+        duration,
+        effectiveFps,
+        (p, s) => onProgress(0.05 + p * 0.45, s),
         cancelSignal: cancelSignal,
       );
+      frameDir = extractedDir;
 
-      if (settings.enableLossyCompression) {
-        onProgress(0.9, 'Applying lossy compression...');
-        await _optimizeWithGifsicle(
-          outputPath,
-          settings,
-          (p, s) => onProgress(0.9 + p * 0.1, s),
-          cancelSignal: cancelSignal,
-        );
-      }
+      onProgress(0.50, 'Encoding GIF...');
+      await _encodeWithGifski(
+        frameDir,
+        frameCount,
+        outputPath,
+        settings,
+        effectiveFps,
+        (p, s) => onProgress(0.50 + p * 0.45, s),
+        cancelSignal: cancelSignal,
+      );
 
       onProgress(1.0, 'Done!');
       return outputPath;
     } finally {
-      try {
-        await File(palettePath).delete();
-      } catch (_) {}
+      if (frameDir != null) {
+        try {
+          await Directory(frameDir).delete(recursive: true);
+        } catch (_) {}
+      }
     }
   }
 }

@@ -11,6 +11,9 @@ class FileList extends StatelessWidget {
   final void Function(int index) onEdit;
   final VoidCallback onClearAll;
 
+  /// Target fps from settings — used to show warnings on low-fps sources.
+  final int targetFps;
+
   const FileList({
     super.key,
     required this.jobs,
@@ -19,6 +22,7 @@ class FileList extends StatelessWidget {
     required this.onRemove,
     required this.onEdit,
     required this.onClearAll,
+    required this.targetFps,
   });
 
   String _formatFileSize(int bytes) {
@@ -97,15 +101,51 @@ class FileList extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                p.basename(job.inputPath),
-                                style: theme.textTheme.bodyMedium,
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      p.basename(job.inputPath),
+                                      style: theme.textTheme.bodyMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (job.sourceFps != null &&
+                                      job.sourceFps!.round() < targetFps)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6),
+                                      child: Tooltip(
+                                        message:
+                                            'Source is ${job.sourceFps!.round()} fps — will be capped',
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme
+                                                .tertiaryContainer,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            '${job.sourceFps!.round()} fps',
+                                            style: GoogleFonts.dmSans(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: theme.colorScheme
+                                                  .onTertiaryContainer,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                               if (job.status ==
                                   ConversionJobStatus.converting ||
                                   job.status ==
-                                      ConversionJobStatus.optimizing)
+                                      ConversionJobStatus.encoding)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: LinearProgressIndicator(
@@ -130,7 +170,7 @@ class FileList extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         if (job.status == ConversionJobStatus.converting ||
-                            job.status == ConversionJobStatus.optimizing)
+                            job.status == ConversionJobStatus.encoding)
                           Text(
                             '${(job.progress * 100).toInt()}%',
                             style: theme.textTheme.bodySmall,
@@ -194,7 +234,7 @@ class FileList extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
         );
       case ConversionJobStatus.converting:
-      case ConversionJobStatus.optimizing:
+      case ConversionJobStatus.encoding:
         return SizedBox(
           width: 18,
           height: 18,

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# fetch_macos_binaries.sh — Download ffmpeg + gifsicle for local macOS dev.
+# fetch_macos_binaries.sh — Download ffmpeg + build libgifski for local macOS dev.
 #
 # For production builds, use the GitHub Actions workflow instead.
-# This script uses Evermeet (ffmpeg) and Homebrew (gifsicle) for convenience.
+# This script uses Evermeet (ffmpeg) and cargo (libgifski) for convenience.
 #
 # Run from: macos/Runner/Resources/
 
@@ -53,31 +53,31 @@ echo "Installed ffmpeg to $SCRIPT_DIR/ffmpeg"
 "$SCRIPT_DIR/ffmpeg" -version 2>&1 | head -1
 shasum -a 256 "$SCRIPT_DIR/ffmpeg"
 
-# ── gifsicle (from Homebrew) ────────────────────────────────────────
-GIFSICLE_EXPECTED_VERSION="1.96"
+# ── libgifski (shared library from cargo) ─────────────────────────────
+GIFSKI_EXPECTED_VERSION="1.34.0"
 
 echo ""
-echo "=== Fetching gifsicle (Homebrew, expecting ${GIFSICLE_EXPECTED_VERSION}) ==="
-if command -v brew >/dev/null 2>&1; then
-  brew list gifsicle >/dev/null 2>&1 || brew install gifsicle
-  cp "$(brew --prefix)/bin/gifsicle" "$SCRIPT_DIR/gifsicle"
-  chmod +x "$SCRIPT_DIR/gifsicle"
+echo "=== Building libgifski ${GIFSKI_EXPECTED_VERSION} (shared library) ==="
 
-  # Verify version
-  INSTALLED_VERSION=$("$SCRIPT_DIR/gifsicle" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-  if [[ "$INSTALLED_VERSION" != "$GIFSICLE_EXPECTED_VERSION" ]]; then
-    echo "WARNING: Expected gifsicle ${GIFSICLE_EXPECTED_VERSION}, got ${INSTALLED_VERSION}"
-  fi
-
-  echo "Installed gifsicle to $SCRIPT_DIR/gifsicle"
-  "$SCRIPT_DIR/gifsicle" --version 2>&1 | head -1
-  shasum -a 256 "$SCRIPT_DIR/gifsicle"
-else
-  echo "ERROR: Homebrew not found."
-  echo "  Install: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-  echo "  Then re-run this script."
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "ERROR: Rust/cargo not found."
+  echo "  Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
   exit 1
 fi
+
+GIFSKI_BUILD_DIR="/tmp/gifski-build"
+rm -rf "$GIFSKI_BUILD_DIR"
+git clone --depth 1 --branch "${GIFSKI_EXPECTED_VERSION}" \
+  https://github.com/ImageOptim/gifski.git "$GIFSKI_BUILD_DIR"
+cd "$GIFSKI_BUILD_DIR"
+cargo build --release
+cp target/release/libgifski.dylib "$SCRIPT_DIR/libgifski.dylib"
+cd "$SCRIPT_DIR"
+rm -rf "$GIFSKI_BUILD_DIR"
+
+echo "Installed libgifski.dylib to $SCRIPT_DIR/libgifski.dylib"
+file "$SCRIPT_DIR/libgifski.dylib"
+shasum -a 256 "$SCRIPT_DIR/libgifski.dylib"
 
 echo ""
 echo "=== Done ==="

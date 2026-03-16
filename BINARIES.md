@@ -1,7 +1,6 @@
-# Bundled Binaries: ffmpeg & gifsicle
+# Bundled Binaries: ffmpeg & libgifski
 
-The app bundles **ffmpeg** (video-to-GIF) and **gifsicle** (GIF optimization) as
-static binaries so end users don't need to install anything.
+The app bundles **ffmpeg** (video decoding / frame extraction) and **libgifski** (high-quality GIF encoding via FFI) so end users don't need to install anything.
 
 > **Preferred approach:** Build from source via the CI workflow (see below).
 > Pre-built binaries are documented as a fallback only.
@@ -10,10 +9,10 @@ static binaries so end users don't need to install anything.
 
 ## Pinned versions
 
-| Binary   | Version   | Source                                            | License |
-|----------|-----------|---------------------------------------------------|---------|
-| ffmpeg   | **7.1.1** | https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz  | LGPL 2.1+ (our build) |
-| gifsicle | **1.96**  | https://github.com/kohler/gifsicle (tag `v1.96`)  | GPL 2   |
+| Binary     | Version   | Source                                            | License |
+|------------|-----------|---------------------------------------------------|---------|
+| ffmpeg     | **7.1.1** | https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz  | LGPL 2.1+ (our build) |
+| libgifski  | **1.34.0**| https://github.com/ImageOptim/gifski (tag `1.34.0`) | MIT |
 
 ### Archive checksums
 
@@ -21,7 +20,7 @@ static binaries so end users don't need to install anything.
 |---------------------------|--------------------------------------------------------------------|
 | `ffmpeg-7.1.1.tar.xz`    | `733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1` |
 
-> gifsicle is built from the pinned Git tag; verify the commit hash from GitHub.
+> gifski is built from the pinned Git tag via `cargo build --release` (produces shared library via cdylib crate type).
 
 ---
 
@@ -29,29 +28,23 @@ static binaries so end users don't need to install anything.
 
 **ffmpeg** is built as **LGPL 2.1+** (no `--enable-gpl`, no GPL-only libraries
 like x264/x265). This avoids copyleft obligations on the app itself. We only
-need the core codecs, GIF muxer, and video filters (`palettegen`, `paletteuse`,
-`scale`, `fps`) which are all LGPL.
+need the core codecs and video filters (`scale`, `fps`) for frame extraction.
 
-**gifsicle** is **GPL 2**. Because it ships as a separate executable invoked as
-a subprocess (not linked), this is generally acceptable. However, you must still
-distribute gifsicle's source code (or a written offer) alongside the app.
-The CI workflow archives the source alongside the built binary for this purpose.
-
-> If GPL bundling is a concern, lossy compression can be made optional / removed,
-> since ffmpeg alone produces the GIF.
+**gifski** library is **MIT** licensed. The macOS GUI app wrapper uses AGPL, but
+the library/CLI is MIT. No source distribution requirements.
 
 ---
 
 ## Where to place binaries
 
-| Platform    | ffmpeg                              | gifsicle                              |
-|-------------|-------------------------------------|---------------------------------------|
-| **macOS**   | `macos/Runner/Resources/ffmpeg`     | `macos/Runner/Resources/gifsicle`     |
-| **Windows** | next to `.exe`: `data/ffmpeg.exe`   | next to `.exe`: `data/gifsicle.exe`   |
-| **Linux**   | next to executable: `lib/ffmpeg`    | next to executable: `lib/gifsicle`    |
+| Platform    | ffmpeg                              | libgifski                                     |
+|-------------|-------------------------------------|-----------------------------------------------|
+| **macOS**   | `macos/Runner/Resources/ffmpeg`     | `macos/Runner/Resources/libgifski.dylib`      |
+| **Windows** | next to `.exe`: `data/ffmpeg.exe`   | next to `.exe`: `data/gifski.dll`             |
+| **Linux**   | next to executable: `lib/ffmpeg`    | next to executable: `lib/libgifski.so`        |
 
-`BinaryResolver` (`lib/services/binary_resolver.dart`) checks these paths first,
-then falls back to system PATH.
+ffmpeg is resolved via `BinaryResolver` (CLI subprocess).
+libgifski is loaded via `GifskiLibrary` (Dart FFI / `DynamicLibrary.open()`).
 
 ---
 
@@ -65,17 +58,16 @@ tools from source **and** builds the full Flutter app for all three platforms.
 For each platform:
 
 1. Downloads ffmpeg source tarball, verifies SHA256
-2. Clones gifsicle at the pinned Git tag
+2. Clones gifski at the pinned Git tag
 3. Configures ffmpeg as a **minimal LGPL static build** (only the codecs,
-   muxers, demuxers, and filters needed for GIF conversion)
-4. Builds gifsicle from source
-5. Records `ffmpeg -version` and `gifsicle --version` in build logs
+   muxers, demuxers, and filters needed for frame extraction)
+4. Installs Rust toolchain and builds gifski shared library (`cargo build --release` → cdylib)
+5. Records `ffmpeg -version` and verifies `libgifski` with `file` command
 6. Computes SHA256 of every output binary
-7. Uploads standalone binary artifacts (binaries + checksums + gifsicle source)
+7. Uploads standalone binary artifacts (binaries + checksums)
 8. **Builds the Flutter app** (`flutter build <platform> --release`)
 9. **Injects the freshly-built binaries** into the app bundle
-10. Verifies the bundled binaries are functional inside the app
-11. **Uploads a ready-to-distribute app artifact** (`.zip` / `.tar.gz`)
+10. **Uploads a ready-to-distribute app artifact** (`.zip` / `.tar.gz`)
 
 ### Platforms & artifacts
 
@@ -98,13 +90,13 @@ When placing binaries — whether from CI or a fallback source — always:
 
 1. **Verify archive SHA256** against the pinned value (for ffmpeg source tarball)
 2. **Verify extracted binary SHA256** against the CI-produced `checksums.sha256`
-3. **Check version output** matches expectations:
+3. **Check version/type output** matches expectations:
    ```
-   ./ffmpeg -version   # should show "ffmpeg version 7.1.1"
-   ./gifsicle --version # should show "LCDF Gifsicle 1.96"
+   ./ffmpeg -version            # should show "ffmpeg version 7.1.1"
+   file libgifski.dylib         # should show "Mach-O 64-bit dynamically linked shared library"
    ```
 4. **Record in CI logs** — the workflow does this automatically
-5. **Quarantine removal (macOS):** `xattr -cr ./ffmpeg ./gifsicle`
+5. **Quarantine removal (macOS):** `xattr -cr ./ffmpeg ./libgifski.dylib`
 
 ---
 
@@ -118,39 +110,10 @@ Use these **only** if you cannot build from source. Always verify SHA256.
 |------------|--------|-------|
 | Preferred  | [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases) | Linux + Windows, publishes `checksums.sha256` |
 | Preferred  | [John Van Sickle](https://johnvansickle.com/ffmpeg/) | Linux static builds, multiple arches |
-| Preferred  | Homebrew / system package manager | macOS + Linux, for gifsicle |
-| Preferred  | [lcdf.org/gifsicle](https://www.lcdf.org/gifsicle/) | Official gifsicle source tarball |
+| Preferred  | Build from source: `cargo build --release` in gifski repo | Produces cdylib |
 | Fallback   | [Evermeet](https://evermeet.cx/ffmpeg/) | macOS Intel only, verify GPG sig |
-| Fallback   | [eternallybored.org](https://eternallybored.org/misc/gifsicle/) | Windows gifsicle, verify hash |
 | Fallback   | [Gyan.dev](https://www.gyan.dev/ffmpeg/builds/) | Windows ffmpeg, verify hash |
 | **Avoid**  | FFbinaries | Not suitable for shipped/bundled binaries |
-
-### BtbN (Linux + Windows ffmpeg)
-
-Use **LGPL** builds (not GPL) to avoid copyleft on your app:
-
-```
-# Example: Linux x86_64 LGPL static
-ffmpeg-master-latest-linux64-lgpl.tar.xz
-# Checksum file at same release:
-checksums.sha256
-```
-
-Always cross-reference the SHA256 from the `checksums.sha256` asset in the same
-release.
-
-### Evermeet (macOS ffmpeg — fallback)
-
-GPG-signed. Intel x86_64 only (runs via Rosetta on Apple Silicon).
-No native ARM builds are planned by the maintainer.
-
-```bash
-# Download + verify
-curl -JL -o ffmpeg.zip "https://evermeet.cx/ffmpeg/getrelease/zip"
-curl -JL -o ffmpeg.zip.sig "https://evermeet.cx/ffmpeg/getrelease/zip/sig"
-# Import key: curl https://evermeet.cx/ffmpeg/0x1A660874.asc | gpg --import
-gpg --verify ffmpeg.zip.sig ffmpeg.zip
-```
 
 ---
 
@@ -163,5 +126,5 @@ cd macos/Runner/Resources
 ./fetch_macos_binaries.sh
 ```
 
-This fetches from Evermeet + Homebrew. For production builds, use the CI
-workflow instead.
+This fetches from Evermeet (ffmpeg) and builds libgifski from source via cargo.
+For production builds, use the CI workflow instead.
