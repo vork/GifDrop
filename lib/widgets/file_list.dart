@@ -8,6 +8,7 @@ class FileList extends StatelessWidget {
   final int? selectedIndex;
   final void Function(int index) onSelect;
   final void Function(int index) onRemove;
+  final void Function(int index) onEdit;
   final VoidCallback onClearAll;
 
   const FileList({
@@ -16,6 +17,7 @@ class FileList extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelect,
     required this.onRemove,
+    required this.onEdit,
     required this.onClearAll,
   });
 
@@ -150,6 +152,17 @@ class FileList extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.tune, size: 16),
+                          tooltip: 'Edit trim & crop',
+                          onPressed: () => onEdit(index),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          padding: EdgeInsets.zero,
+                          splashRadius: 14,
+                        ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 16),
                           onPressed: () => onRemove(index),

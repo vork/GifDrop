@@ -15,6 +15,40 @@ class ConversionJob {
   int? outputFileSize;
   String statusText;
 
+  // Per-video trim (frame-based)
+  int? trimStartFrame;
+  int? trimEndFrame;
+
+  // Per-video crop (pixel-based)
+  int? cropX;
+  int? cropY;
+  int? cropWidth;
+  int? cropHeight;
+
+  bool get hasTrim => trimStartFrame != null || trimEndFrame != null;
+  bool get hasCrop =>
+      cropX != null || cropY != null || cropWidth != null || cropHeight != null;
+
+  /// Clamp trim values so they are valid for a video with [totalFrames].
+  /// If trimEnd exceeds total frames, it is set to null (meaning end of video).
+  /// If trimStart >= totalFrames, trim is cleared entirely.
+  void clampTrim(int totalFrames) {
+    if (trimStartFrame != null && trimStartFrame! >= totalFrames) {
+      trimStartFrame = null;
+      trimEndFrame = null;
+      return;
+    }
+    if (trimEndFrame != null && trimEndFrame! >= totalFrames) {
+      trimEndFrame = null;
+    }
+    if (trimStartFrame != null &&
+        trimEndFrame != null &&
+        trimStartFrame! >= trimEndFrame!) {
+      trimStartFrame = null;
+      trimEndFrame = null;
+    }
+  }
+
   ConversionJob({
     required this.inputPath,
     this.status = ConversionJobStatus.pending,
@@ -23,5 +57,11 @@ class ConversionJob {
     this.errorMessage,
     this.outputFileSize,
     this.statusText = '',
+    this.trimStartFrame,
+    this.trimEndFrame,
+    this.cropX,
+    this.cropY,
+    this.cropWidth,
+    this.cropHeight,
   });
 }

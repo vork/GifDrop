@@ -9,6 +9,7 @@ import '../widgets/drop_zone.dart';
 import '../widgets/file_list.dart';
 import '../widgets/settings_panel.dart';
 import '../widgets/gif_preview.dart';
+import '../widgets/video_edit_dialog.dart';
 
 class ConverterScreen extends StatefulWidget {
   const ConverterScreen({super.key});
@@ -88,7 +89,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
 
       try {
         final outputPath = await _ffmpegService.convertToGif(
-          inputPath: job.inputPath,
+          job: job,
           settings: _settings,
           onProgress: (progress, status) {
             if (!mounted) return;
@@ -134,6 +135,38 @@ class _ConverterScreenState extends State<ConverterScreen> {
       setState(() {
         _isConverting = false;
         _cancelCompleter = null;
+      });
+    }
+  }
+
+  Future<void> _openEditDialog(int index) async {
+    final job = _jobs[index];
+    final result = await showDialog<VideoEditResult>(
+      context: context,
+      builder: (context) => VideoEditDialog(
+        videoPath: job.inputPath,
+        ffmpegService: _ffmpegService,
+        job: job,
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        final targets = result.applyToAll ? _jobs : [job];
+        for (final target in targets) {
+          target.trimStartFrame = result.trimStartFrame;
+          target.trimEndFrame = result.trimEndFrame;
+          target.cropX = result.cropX;
+          target.cropY = result.cropY;
+          target.cropWidth = result.cropWidth;
+          target.cropHeight = result.cropHeight;
+          if (target.status == ConversionJobStatus.done ||
+              target.status == ConversionJobStatus.error) {
+            target.status = ConversionJobStatus.pending;
+            target.progress = 0;
+            target.statusText = '';
+            target.errorMessage = null;
+          }
+        }
       });
     }
   }
@@ -225,6 +258,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
                     selectedIndex: _previewIndex,
                     onSelect: (i) => setState(() => _previewIndex = i),
                     onRemove: _isConverting ? (_) {} : _removeJob,
+                    onEdit: _isConverting ? (_) {} : _openEditDialog,
                     onClearAll: _isConverting ? () {} : _clearAll,
                   ),
                 ],

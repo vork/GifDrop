@@ -1,14 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'binary_resolver.dart';
+import '../models/conversion_job.dart';
 import '../models/conversion_settings.dart';
 
 /// Thrown when conversion is stopped by user (Cancel).
 class ConversionCancelledException implements Exception {
   @override
   String toString() => 'Conversion cancelled';
+}
+
+/// Basic video metadata extracted from FFmpeg probe.
+class VideoInfo {
+  final double duration;
+  final int width;
+  final int height;
+  final double fps;
+  final int totalFrames;
+
+  const VideoInfo({
+    required this.duration,
+    required this.width,
+    required this.height,
+    required this.fps,
+    required this.totalFrames,
+  });
 }
 
 class FfmpegService {
@@ -70,6 +89,72 @@ class FfmpegService {
     return (exitCode!, stderrBuf.toString());
   }
 
+  /// Probe video for metadata: duration, resolution, fps, total frames.
+  Future<VideoInfo> getVideoInfo(String inputPath) async {
+    final ffmpeg = await ffmpegPath;
+    final (_, stderr) = await _runProcess(ffmpeg, ['-i', inputPath]);
+
+    // Duration
+    double duration = 0;
+    final durRegex = RegExp(r'Duration:\s+(\d+):(\d+):(\d+)\.(\d+)');
+    final durMatch = durRegex.firstMatch(stderr);
+    if (durMatch != null) {
+      duration = int.parse(durMatch.group(1)!) * 3600.0 +
+          int.parse(durMatch.group(2)!) * 60.0 +
+          int.parse(durMatch.group(3)!) +
+          int.parse(durMatch.group(4)!) / 100.0;
+    }
+
+    // Resolution and fps from video stream line
+    int width = 0;
+    int height = 0;
+    double fps = 30;
+    final streamRegex = RegExp(r'Stream.*Video:.*?(\d{2,5})x(\d{2,5})');
+    final streamMatch = streamRegex.firstMatch(stderr);
+    if (streamMatch != null) {
+      width = int.parse(streamMatch.group(1)!);
+      height = int.parse(streamMatch.group(2)!);
+    }
+    final fpsRegex = RegExp(r'(\d+(?:\.\d+)?)\s+fps');
+    final fpsMatch = fpsRegex.firstMatch(stderr);
+    if (fpsMatch != null) {
+      fps = double.parse(fpsMatch.group(1)!);
+    }
+
+    final totalFrames = (duration * fps).round();
+
+    return VideoInfo(
+      duration: duration,
+      width: width,
+      height: height,
+      fps: fps,
+      totalFrames: totalFrames,
+    );
+  }
+
+  /// Extract a single frame at a given time (seconds) and save as PNG.
+  /// Returns the output file path.
+  Future<String> extractFrame(String inputPath, double timeSeconds) async {
+    final ffmpeg = await ffmpegPath;
+    final outputPath = p.join(
+      Directory.systemTemp.path,
+      'gif_frame_${DateTime.now().millisecondsSinceEpoch}.png',
+    );
+
+    final args = [
+      '-ss', timeSeconds.toStringAsFixed(3),
+      '-i', inputPath,
+      '-vframes', '1',
+      '-y', outputPath,
+    ];
+
+    final (exitCode, stderr) = await _runProcess(ffmpeg, args);
+    if (exitCode != 0) {
+      throw Exception('Frame extraction failed (exit $exitCode):\n$stderr');
+    }
+    return outputPath;
+  }
+
   Future<double> getVideoDuration(String inputPath, {Future<void>? cancelSignal}) async {
     final ffmpeg = await ffmpegPath;
     final (_, stderr) = await _runProcess(ffmpeg, ['-i', inputPath], cancelSignal: cancelSignal);
@@ -85,11 +170,28 @@ class FfmpegService {
     return 0;
   }
 
-  /// Build the pre-processing filter chain (fps, scale, duplicate removal).
+  /// Build the pre-processing filter chain (trim, fps, scale, crop, duplicate removal).
   /// Returns the chain as a string. For use in both palette and GIF passes.
-  String _buildPreFilters(ConversionSettings settings) {
+  /// Per-video trim/crop comes from the [ConversionJob].
+  @visibleForTesting
+  String buildPreFilters(ConversionSettings settings, ConversionJob job) {
     final parts = <String>[];
+
+    // Trim must come first (before any resampling)
+    if (job.hasTrim) {
+      final trimParts = <String>[];
+      if (job.trimStartFrame != null) {
+        trimParts.add('start_frame=${job.trimStartFrame}');
+      }
+      if (job.trimEndFrame != null) {
+        trimParts.add('end_frame=${job.trimEndFrame}');
+      }
+      parts.add('trim=${trimParts.join(':')}');
+      parts.add('setpts=PTS-STARTPTS');
+    }
+
     parts.add('fps=${settings.fps}');
+
     if (settings.width != null) {
       parts.add('scale=${settings.width}:-2:flags=lanczos');
     }
@@ -97,13 +199,24 @@ class FfmpegService {
       parts.add('mpdecimate=hi=64*12:lo=64*5:frac=0.33');
       parts.add('setpts=N/FRAME_RATE/TB');
     }
+
+    // Crop after scale so coordinates are relative to output resolution
+    if (job.hasCrop) {
+      final w = job.cropWidth ?? 'iw';
+      final h = job.cropHeight ?? 'ih';
+      final x = job.cropX ?? 0;
+      final y = job.cropY ?? 0;
+      parts.add('crop=$w:$h:$x:$y');
+    }
+
     return parts.join(',');
   }
 
   /// Build the boomerang portion of the filter graph.
   /// [inputLabel] is the label of the stream to process (e.g. empty for -vf, or a named label).
   /// Returns (filterGraph, outputLabel) where outputLabel is the named stream to continue with.
-  String _buildBoomerangFilter(ConversionSettings settings) {
+  @visibleForTesting
+  String buildBoomerangFilter(ConversionSettings settings) {
     if (!settings.isBoomerang) return '';
 
     if (settings.loopMode == LoopMode.boomerang) {
@@ -126,18 +239,19 @@ class FfmpegService {
   Future<String> _generatePalette(
     String inputPath,
     ConversionSettings settings,
+    ConversionJob job,
     String palettePath, {
     Future<void>? cancelSignal,
   }) async {
     final ffmpeg = await ffmpegPath;
 
     final statsMode = settings.useLocalColorTables ? 'diff' : 'full';
-    final preFilters = _buildPreFilters(settings);
+    final preFilters = buildPreFilters(settings, job);
     final palettegenOpts = 'palettegen=stats_mode=$statsMode:max_colors=${settings.maxColors}';
 
     String vf;
     if (settings.isBoomerang) {
-      final boomerang = _buildBoomerangFilter(settings);
+      final boomerang = buildBoomerangFilter(settings);
       vf = '$preFilters,$boomerang,$palettegenOpts';
     } else {
       vf = '$preFilters,$palettegenOpts';
@@ -161,13 +275,14 @@ class FfmpegService {
     String palettePath,
     String outputPath,
     ConversionSettings settings,
+    ConversionJob job,
     double totalDuration,
     void Function(double progress, String status) onProgress, {
     Future<void>? cancelSignal,
   }) async {
     final ffmpeg = await ffmpegPath;
 
-    final preFilters = _buildPreFilters(settings);
+    final preFilters = buildPreFilters(settings, job);
 
     final paletteOpts = StringBuffer('paletteuse=dither=${settings.ditherMode}');
     if (settings.ditherMode == 'bayer') {
@@ -179,7 +294,7 @@ class FfmpegService {
 
     String filterComplex;
     if (settings.isBoomerang) {
-      final boomerang = _buildBoomerangFilter(settings);
+      final boomerang = buildBoomerangFilter(settings);
       filterComplex =
           '$preFilters,$boomerang [x]; [x][1:v] $paletteOpts';
     } else {
@@ -242,11 +357,12 @@ class FfmpegService {
   }
 
   Future<String> convertToGif({
-    required String inputPath,
+    required ConversionJob job,
     required ConversionSettings settings,
     required void Function(double progress, String status) onProgress,
     Future<void>? cancelSignal,
   }) async {
+    final inputPath = job.inputPath;
     final outputDir = p.dirname(inputPath);
     final baseName = p.basenameWithoutExtension(inputPath);
     final outputPath = p.join(outputDir, '$baseName.gif');
@@ -257,10 +373,16 @@ class FfmpegService {
 
     try {
       onProgress(0.0, 'Analyzing video...');
-      final duration = await getVideoDuration(inputPath, cancelSignal: cancelSignal);
+      final info = await getVideoInfo(inputPath);
+      final duration = info.duration;
+
+      // Clamp trim to actual video length
+      if (job.hasTrim) {
+        job.clampTrim(info.totalFrames);
+      }
 
       onProgress(0.05, 'Generating color palette...');
-      await _generatePalette(inputPath, settings, palettePath, cancelSignal: cancelSignal);
+      await _generatePalette(inputPath, settings, job, palettePath, cancelSignal: cancelSignal);
 
       // Boomerang modes roughly double the effective duration for progress tracking
       final effectiveDuration = settings.isBoomerang ? duration * 2 : duration;
@@ -271,6 +393,7 @@ class FfmpegService {
         palettePath,
         outputPath,
         settings,
+        job,
         effectiveDuration,
         (p, s) => onProgress(0.1 + p * 0.8, s),
         cancelSignal: cancelSignal,
