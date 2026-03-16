@@ -85,13 +85,17 @@ class FfmpegService {
     return 0;
   }
 
-  /// Build the pre-processing filter chain (fps, scale, boomerang).
+  /// Build the pre-processing filter chain (fps, scale, duplicate removal).
   /// Returns the chain as a string. For use in both palette and GIF passes.
   String _buildPreFilters(ConversionSettings settings) {
     final parts = <String>[];
     parts.add('fps=${settings.fps}');
     if (settings.width != null) {
       parts.add('scale=${settings.width}:-2:flags=lanczos');
+    }
+    if (settings.enableDuplicateFrameRemoval) {
+      parts.add('mpdecimate=hi=64*12:lo=64*5:frac=0.33');
+      parts.add('setpts=N/FRAME_RATE/TB');
     }
     return parts.join(',');
   }
@@ -129,13 +133,14 @@ class FfmpegService {
 
     final statsMode = settings.useLocalColorTables ? 'diff' : 'full';
     final preFilters = _buildPreFilters(settings);
+    final palettegenOpts = 'palettegen=stats_mode=$statsMode:max_colors=${settings.maxColors}';
 
     String vf;
     if (settings.isBoomerang) {
       final boomerang = _buildBoomerangFilter(settings);
-      vf = '$preFilters,$boomerang,palettegen=stats_mode=$statsMode';
+      vf = '$preFilters,$boomerang,$palettegenOpts';
     } else {
-      vf = '$preFilters,palettegen=stats_mode=$statsMode';
+      vf = '$preFilters,$palettegenOpts';
     }
 
     final args = [
