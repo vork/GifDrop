@@ -119,6 +119,39 @@ void main() {
     });
   });
 
+  group('buildPreFilters edge cases', () {
+    test('no crop when no crop fields set', () {
+      final job = ConversionJob(inputPath: '/v.mp4');
+      const settings = ConversionSettings(fps: 20);
+      final result = service.buildPreFilters(settings, job);
+      expect(result, 'fps=20');
+      expect(result, isNot(contains('crop')));
+    });
+
+    test('crop defaults missing y to 0', () {
+      final job = ConversionJob(inputPath: '/v.mp4', cropX: 10, cropY: null);
+      const settings = ConversionSettings();
+      final result = service.buildPreFilters(settings, job);
+      // cropX alone triggers hasCrop
+      expect(result, contains('crop=iw:ih:10:0'));
+    });
+
+    test('effectiveFps of 60 is used', () {
+      final job = ConversionJob(inputPath: '/v.mp4');
+      const settings = ConversionSettings(fps: 30);
+      final result =
+          service.buildPreFilters(settings, job, effectiveFps: 60);
+      expect(result, 'fps=60');
+    });
+
+    test('scale not added when width is null', () {
+      final job = ConversionJob(inputPath: '/v.mp4');
+      const settings = ConversionSettings();
+      final result = service.buildPreFilters(settings, job);
+      expect(result, isNot(contains('scale')));
+    });
+  });
+
   group('buildBoomerangFilter', () {
     test('returns empty string for non-boomerang modes', () {
       const loop = ConversionSettings(loopMode: LoopMode.loop);
