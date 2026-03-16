@@ -169,8 +169,11 @@ jobs:
           ENTITLEMENTS="macos/Runner/Release.entitlements"
 
           # Sign bundled CLI tools and shared libraries with hardened runtime
+          # ffmpeg needs allow-unsigned-executable-memory for JIT SIMD decoding
+          # libgifski needs disable-library-validation to load from Resources
           codesign --force --options runtime \
             --sign "$CERT_NAME" \
+            --entitlements "$ENTITLEMENTS" \
             "$APP_NAME/Contents/Resources/ffmpeg" \
             "$APP_NAME/Contents/Resources/libgifski.dylib"
 
