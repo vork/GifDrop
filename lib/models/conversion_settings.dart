@@ -14,6 +14,8 @@ class ConversionSettings {
   final int bayerScale;
   final bool enableLossyCompression;
   final int lossyLevel;
+  final bool enableDuplicateFrameRemoval;
+  final int maxColors;
 
   const ConversionSettings({
     this.width,
@@ -24,6 +26,8 @@ class ConversionSettings {
     this.bayerScale = 3,
     this.enableLossyCompression = false,
     this.lossyLevel = 40,
+    this.enableDuplicateFrameRemoval = false,
+    this.maxColors = 256,
   });
 
   bool get isLoop => loopMode != LoopMode.none;
@@ -39,6 +43,8 @@ class ConversionSettings {
     int? bayerScale,
     bool? enableLossyCompression,
     int? lossyLevel,
+    bool? enableDuplicateFrameRemoval,
+    int? maxColors,
   }) {
     return ConversionSettings(
       width: width != null ? width() : this.width,
@@ -50,6 +56,9 @@ class ConversionSettings {
       enableLossyCompression:
           enableLossyCompression ?? this.enableLossyCompression,
       lossyLevel: lossyLevel ?? this.lossyLevel,
+      enableDuplicateFrameRemoval:
+          enableDuplicateFrameRemoval ?? this.enableDuplicateFrameRemoval,
+      maxColors: maxColors ?? this.maxColors,
     );
   }
 
@@ -91,6 +100,8 @@ class ConversionSettings {
   ];
 
   static const List<int> fpsPresets = [10, 15, 20, 24, 30];
+
+  static const List<int> maxColorsPresets = [32, 64, 128, 256];
 
   static const List<String> ditherModes = [
     'bayer',

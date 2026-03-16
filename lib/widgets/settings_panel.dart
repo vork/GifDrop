@@ -156,6 +156,32 @@ class SettingsPanel extends StatelessWidget {
 
     return Column(
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Color palette size:', style: boldLabel),
+            ),
+            Expanded(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: ConversionSettings.maxColorsPresets.map((count) {
+                  final isSelected = settings.maxColors == count;
+                  return ChoiceChip(
+                    label: Text('$count'),
+                    selected: isSelected,
+                    onSelected: enabled
+                        ? (_) => onSettingsChanged(
+                            settings.copyWith(maxColors: count))
+                        : null,
+                    visualDensity: VisualDensity.compact,
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
         SwitchListTile(
           title: Text('Local color tables', style: boldLabel),
           subtitle: Text('Per-frame palettes (better quality, larger)',
@@ -164,6 +190,20 @@ class SettingsPanel extends StatelessWidget {
           onChanged: enabled
               ? (v) => onSettingsChanged(
                   settings.copyWith(useLocalColorTables: v))
+              : null,
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: 4),
+        SwitchListTile(
+          title: Text('Remove duplicate frames', style: boldLabel),
+          subtitle: Text(
+              'Drop near-identical frames to reduce file size',
+              style: subtitleStyle),
+          value: settings.enableDuplicateFrameRemoval,
+          onChanged: enabled
+              ? (v) => onSettingsChanged(
+                  settings.copyWith(enableDuplicateFrameRemoval: v))
               : null,
           dense: true,
           contentPadding: EdgeInsets.zero,
