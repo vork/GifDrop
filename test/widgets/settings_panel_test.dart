@@ -44,7 +44,7 @@ void main() {
       }
     });
 
-    testWidgets('renders all fps presets including 60', (tester) async {
+    testWidgets('renders all fps presets including 50', (tester) async {
       await tester.pumpWidget(_wrap(SettingsPanel(
         settings: settings,
         onSettingsChanged: (_) {},
@@ -111,8 +111,8 @@ void main() {
         onSettingsChanged: (s) => lastChanged = s,
       )));
 
-      await tester.tap(find.text('60'));
-      expect(lastChanged?.fps, 60);
+      await tester.tap(find.text('50'));
+      expect(lastChanged?.fps, 50);
     });
 
     testWidgets('selecting loop mode fires callback', (tester) async {

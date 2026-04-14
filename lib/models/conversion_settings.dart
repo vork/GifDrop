@@ -28,7 +28,7 @@ class ConversionSettings {
 
   const ConversionSettings({
     this.width,
-    this.fps = 30,
+    this.fps = 20,
     this.loopMode = LoopMode.loop,
     this.quality = 80,
     this.motionQuality,
@@ -117,7 +117,11 @@ class ConversionSettings {
     1024,
   ];
 
-  static const List<int> fpsPresets = [10, 15, 20, 24, 30, 60];
+  /// GIF frame delays are in centiseconds (1/100s), so only framerates of
+  /// 100/n are exactly representable.  Browsers also throttle delays below
+  /// ~2 cs (≈50 fps) due to a Netscape-era quirk, so 50 fps is the practical
+  /// ceiling.
+  static const List<int> fpsPresets = [10, 15, 20, 25, 30, 50];
 
   /// Returns the matching preset for the current quality settings, or null if custom.
   QualityPreset? get matchingPreset {

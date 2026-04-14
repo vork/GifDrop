@@ -6,7 +6,7 @@ void main() {
     test('default values', () {
       const s = ConversionSettings();
       expect(s.width, isNull);
-      expect(s.fps, 30);
+      expect(s.fps, 20);
       expect(s.loopMode, LoopMode.loop);
       expect(s.quality, 80);
       expect(s.motionQuality, isNull);
@@ -187,8 +187,9 @@ void main() {
       expect(ConversionSettings.qualityLabel(91), 'Maximum');
     });
 
-    test('fpsPresets contains 60 fps option', () {
-      expect(ConversionSettings.fpsPresets, contains(60));
+    test('fpsPresets contains 50 fps option (max for GIF)', () {
+      expect(ConversionSettings.fpsPresets, contains(50));
+      expect(ConversionSettings.fpsPresets, isNot(contains(60)));
     });
 
     test('widthPresets starts with null (original) and is sorted', () {
