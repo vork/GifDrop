@@ -76,6 +76,20 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
   // Track temp files for cleanup
   final List<String> _tempFiles = [];
 
+  double get _safeFps {
+    final fps = _videoInfo?.fps ?? 0;
+    if (!fps.isFinite || fps <= 0) return 1;
+    return fps;
+  }
+
+  double get _safeAspectRatio {
+    final info = _videoInfo;
+    if (info == null || info.width <= 0 || info.height <= 0) {
+      return 16 / 9;
+    }
+    return info.width / info.height;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -105,11 +119,14 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
       setState(() {
         _videoInfo = info;
         _loading = false;
+        final maxFrame = (info.totalFrames - 1).clamp(0, 1 << 30).toInt();
         if (_trimEnd == 0) _trimEnd = info.totalFrames;
         if (widget.job.trimEndFrame != null) {
           _trimEnd = widget.job.trimEndFrame!;
         }
-        _currentFrame = _trimStart;
+        _trimStart = _trimStart.clamp(0, maxFrame).toInt();
+        _trimEnd = _trimEnd.clamp(_trimStart, info.totalFrames).toInt();
+        _currentFrame = _trimStart.clamp(0, maxFrame).toInt();
       });
       _extractCurrentFrame();
     } catch (e) {
@@ -127,7 +144,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
       if (!mounted || _videoInfo == null) return;
       setState(() => _extractingFrame = true);
       try {
-        final timeSeconds = _currentFrame / _videoInfo!.fps;
+        final timeSeconds = _currentFrame / _safeFps;
         final path = await widget.ffmpegService
             .extractFrame(widget.videoPath, timeSeconds);
         _tempFiles.add(path);
@@ -151,13 +168,13 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
       _prepareProgress = 0;
     });
 
-    final fps = _videoInfo!.fps;
+    final fps = _safeFps;
     final start = _trimEnabled ? _trimStart : 0;
     final end = _trimEnabled ? _trimEnd : _videoInfo!.totalFrames;
-    final rangeFrames = end - start;
+    final rangeFrames = (end - start).clamp(1, 1 << 30).toInt();
 
     // Extract ~20 frames, or fewer if the range is short
-    final frameCount = rangeFrames.clamp(2, 24);
+    final frameCount = rangeFrames.clamp(2, 24).toInt();
     final step = rangeFrames / frameCount;
 
     final paths = <String>[];
@@ -341,9 +358,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
   Widget _buildPreviewArea(ThemeData theme, BoxConstraints constraints) {
     if (_framePath == null) {
       return AspectRatio(
-        aspectRatio: _videoInfo != null
-            ? _videoInfo!.width / _videoInfo!.height
-            : 16 / 9,
+        aspectRatio: _safeAspectRatio,
         child: Container(
           decoration: BoxDecoration(
             color: Colors.black,
@@ -355,7 +370,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
     }
 
     final info = _videoInfo!;
-    final aspectRatio = info.width / info.height;
+    final aspectRatio = _safeAspectRatio;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),

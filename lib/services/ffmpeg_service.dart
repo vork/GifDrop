@@ -91,6 +91,15 @@ class FfmpegService {
   Future<VideoInfo> getVideoInfo(String inputPath) async {
     final ffmpeg = await ffmpegPath;
     final (_, stderr) = await _runProcess(ffmpeg, ['-i', inputPath]);
+    double? parsePositive(RegExp regex) {
+      final match = regex.firstMatch(stderr);
+      if (match == null) return null;
+      final value = double.tryParse(match.group(1) ?? '');
+      if (value == null || !value.isFinite || value <= 0) {
+        return null;
+      }
+      return value;
+    }
 
     // Duration
     double duration = 0;
@@ -106,25 +115,33 @@ class FfmpegService {
     // Resolution and fps from video stream line
     int width = 0;
     int height = 0;
-    double fps = 30;
-    final streamRegex = RegExp(r'Stream.*Video:.*?(\d{2,5})x(\d{2,5})');
+    double fps = 15;
+    final streamRegex = RegExp(r'Stream.*Video:.*?(\d{1,5})x(\d{1,5})');
     final streamMatch = streamRegex.firstMatch(stderr);
     if (streamMatch != null) {
       width = int.parse(streamMatch.group(1)!);
       height = int.parse(streamMatch.group(2)!);
+    } else {
+      // Fallback for odd ffmpeg stream formatting.
+      final fallbackResolution = RegExp(r'(\d{1,5})x(\d{1,5})').firstMatch(stderr);
+      if (fallbackResolution != null) {
+        width = int.parse(fallbackResolution.group(1)!);
+        height = int.parse(fallbackResolution.group(2)!);
+      }
     }
-    final fpsRegex = RegExp(r'(\d+(?:\.\d+)?)\s+fps');
-    final fpsMatch = fpsRegex.firstMatch(stderr);
-    if (fpsMatch != null) {
-      fps = double.parse(fpsMatch.group(1)!);
-    }
+    fps = parsePositive(RegExp(r'(\d+(?:\.\d+)?)\s+fps')) ??
+        parsePositive(RegExp(r'(\d+(?:\.\d+)?)\s+tbr')) ??
+        fps;
 
-    final totalFrames = (duration * fps).round();
+    final totalFrames =
+        duration > 0 ? (duration * fps).round().clamp(1, 1 << 30).toInt() : 1;
+    final safeWidth = width > 0 ? width : 1;
+    final safeHeight = height > 0 ? height : 1;
 
     return VideoInfo(
       duration: duration,
-      width: width,
-      height: height,
+      width: safeWidth,
+      height: safeHeight,
       fps: fps,
       totalFrames: totalFrames,
     );
