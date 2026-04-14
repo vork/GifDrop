@@ -15,23 +15,33 @@ class DropZone extends StatefulWidget {
 class _DropZoneState extends State<DropZone> {
   bool _isDragging = false;
 
-  static const _videoExtensions = [
-    'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', 'mpg', 'mpeg',
+  static const _supportedExtensions = [
+    'mp4',
+    'mov',
+    'avi',
+    'mkv',
+    'webm',
+    'flv',
+    'wmv',
+    'm4v',
+    'mpg',
+    'mpeg',
+    'gif',
   ];
 
-  bool _isVideoFile(String path) {
+  bool _isSupportedFile(String path) {
     final ext = path.split('.').last.toLowerCase();
-    return _videoExtensions.contains(ext);
+    return _supportedExtensions.contains(ext);
   }
 
-  /// Recursively collects all video file paths under [dirPath] (including subfolders).
-  List<String> _collectVideosFromDirectory(String dirPath) {
+  /// Recursively collects all supported file paths under [dirPath].
+  List<String> _collectSupportedFilesFromDirectory(String dirPath) {
     final dir = Directory(dirPath);
     if (!dir.existsSync()) return [];
     final list = <String>[];
     try {
       for (final entity in dir.listSync(recursive: true)) {
-        if (entity is File && _isVideoFile(entity.path)) {
+        if (entity is File && _isSupportedFile(entity.path)) {
           list.add(entity.path);
         }
       }
@@ -41,15 +51,15 @@ class _DropZoneState extends State<DropZone> {
     return list;
   }
 
-  /// Expands paths: directories become all videos inside (recursive); files are included if video.
-  List<String> _expandPathsToVideos(List<String> paths) {
+  /// Expands paths: directories become supported files inside (recursive).
+  List<String> _expandPathsToSupportedFiles(List<String> paths) {
     final out = <String>{};
     for (final path in paths) {
       final entity = File(path);
       final dir = Directory(path);
       if (dir.existsSync()) {
-        out.addAll(_collectVideosFromDirectory(path));
-      } else if (entity.existsSync() && _isVideoFile(path)) {
+        out.addAll(_collectSupportedFilesFromDirectory(path));
+      } else if (entity.existsSync() && _isSupportedFile(path)) {
         out.add(path);
       }
     }
@@ -63,9 +73,9 @@ class _DropZoneState extends State<DropZone> {
     final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final result = await FilePicker.platform.pickFiles(
       type: isDesktop ? FileType.any : FileType.custom,
-      allowedExtensions: isDesktop ? null : _videoExtensions,
+      allowedExtensions: isDesktop ? null : _supportedExtensions,
       allowMultiple: true,
-      dialogTitle: 'Select video files',
+      dialogTitle: 'Select video or GIF files',
       lockParentWindow: true,
     );
     if (!mounted) return;
@@ -73,10 +83,10 @@ class _DropZoneState extends State<DropZone> {
       final paths = result.files
           .where((f) => f.path != null)
           .map((f) => f.path!)
-          .where(_isVideoFile)
+          .where(_isSupportedFile)
           .toList();
       if (paths.isNotEmpty) {
-        widget.onFilesDropped(_expandPathsToVideos(paths));
+        widget.onFilesDropped(_expandPathsToSupportedFiles(paths));
       }
     }
   }
@@ -85,14 +95,14 @@ class _DropZoneState extends State<DropZone> {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
     final dirPath = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select folder with videos',
+      dialogTitle: 'Select folder with videos or GIFs',
       lockParentWindow: true,
     );
     if (!mounted) return;
     if (dirPath != null) {
-      final videos = _collectVideosFromDirectory(dirPath);
-      if (videos.isNotEmpty) {
-        widget.onFilesDropped(videos);
+      final files = _collectSupportedFilesFromDirectory(dirPath);
+      if (files.isNotEmpty) {
+        widget.onFilesDropped(files);
       }
     }
   }
@@ -116,9 +126,9 @@ class _DropZoneState extends State<DropZone> {
           onDragDone: (details) {
             setState(() => _isDragging = false);
             final paths = details.files.map((f) => f.path).toList();
-            final videos = _expandPathsToVideos(paths);
-            if (videos.isNotEmpty) {
-              widget.onFilesDropped(videos);
+            final files = _expandPathsToSupportedFiles(paths);
+            if (files.isNotEmpty) {
+              widget.onFilesDropped(files);
             }
           },
           child: AnimatedContainer(
@@ -140,7 +150,7 @@ class _DropZoneState extends State<DropZone> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Drop video files or a folder here',
+                    'Drop video/GIF files or a folder here',
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

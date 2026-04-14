@@ -403,7 +403,10 @@ class FfmpegService {
     final inputPath = job.inputPath;
     final outputDir = p.dirname(inputPath);
     final baseName = p.basenameWithoutExtension(inputPath);
-    final outputPath = p.join(outputDir, '$baseName.gif');
+    final inputExt = p.extension(inputPath).toLowerCase();
+    final outputPath = inputExt == '.gif'
+        ? p.join(outputDir, '${baseName}_optimized.gif')
+        : p.join(outputDir, '$baseName.gif');
 
     String? frameDir;
     try {
@@ -416,10 +419,12 @@ class FfmpegService {
         job.clampTrim(info.totalFrames);
       }
 
-      // Cap output fps at source video fps to avoid duplicate frames
-      final effectiveFps = settings.fps < info.fps.round()
-          ? settings.fps
-          : info.fps.round();
+      // Cap output fps at source video fps to avoid duplicate frames.
+      // Also cap at 50 fps — GIF delays are in centiseconds so only 100/n
+      // framerates are exact, and browsers throttle delays below ~2 cs.
+      final effectiveFps = settings.fps
+          .clamp(1, info.fps.round())
+          .clamp(1, 50);
 
       onProgress(0.05, 'Extracting frames...');
       final (extractedDir, frameCount) = await _extractFrames(
