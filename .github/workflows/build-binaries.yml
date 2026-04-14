@@ -3,6 +3,8 @@ name: Build & Package App
 on:
   workflow_dispatch:        # manual trigger (builds only, no release)
   push:
+    branches:
+      - main                # seed reusable caches from default branch
     tags:
       - 'v*'               # tag push → build + create GitHub Release
 
@@ -116,7 +118,7 @@ jobs:
 
       # ── Code-signing certificate ─────────────────────────────────
       - name: Import code-signing certificate
-        if: env.MACOS_CERTIFICATE_P12 != ''
+        if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && env.MACOS_CERTIFICATE_P12 != ''
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -143,11 +145,13 @@ jobs:
 
       # ── Flutter app build ────────────────────────────────────────
       - uses: subosito/flutter-action@v2
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
 
       - name: Place binaries for macOS bundle
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: |
           mkdir -p macos/Runner/Resources
           cp ffmpeg-install/bin/ffmpeg macos/Runner/Resources/ffmpeg
@@ -155,11 +159,12 @@ jobs:
           chmod +x macos/Runner/Resources/ffmpeg
 
       - name: Build macOS app
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: flutter build macos --release
 
       # ── Code-sign & notarize ────────────────────────────────────
       - name: Codesign app bundle
-        if: env.MACOS_CERTIFICATE_P12 != ''
+        if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && env.MACOS_CERTIFICATE_P12 != ''
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           CERT_NAME: ${{ secrets.MACOS_CERT_NAME }}
@@ -200,7 +205,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_NAME"
 
       - name: Notarize app
-        if: env.MACOS_CERTIFICATE_P12 != '' && env.APPLE_ID != ''
+        if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && env.MACOS_CERTIFICATE_P12 != '' && env.APPLE_ID != ''
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -226,6 +231,7 @@ jobs:
           rm -f notarize-upload.zip
 
       - name: Package macOS app
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: |
           cd build/macos/Build/Products/Release
           APP_NAME=$(ls -d *.app | head -1)
@@ -239,10 +245,11 @@ jobs:
 
       # ── Clean up keychain ───────────────────────────────────────
       - name: Clean up keychain
-        if: always() && env.KEYCHAIN_FILE != ''
+        if: always() && (github.event_name != 'push' || github.ref != 'refs/heads/main') && env.KEYCHAIN_FILE != ''
         run: security delete-keychain "$KEYCHAIN_FILE" || true
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         with:
           name: app-macos-arm64
           path: build/macos/Build/Products/Release/GifDrop-macos-arm64.zip
@@ -350,14 +357,17 @@ jobs:
 
       # ── Flutter app build ────────────────────────────────────────
       - uses: subosito/flutter-action@v2
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
 
       - name: Build Linux app
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: flutter build linux --release
 
       - name: Inject binaries into Linux bundle
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: |
           BUNDLE="build/linux/x64/release/bundle"
           # BinaryResolver looks for <exec>/lib/ffmpeg
@@ -370,11 +380,13 @@ jobs:
           file "${BUNDLE}/lib/libgifski.so"
 
       - name: Package Linux app
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: |
           cd build/linux/x64/release
           tar czf GifDrop-linux-x86_64.tar.gz -C bundle .
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         with:
           name: app-linux-x86_64
           path: build/linux/x64/release/GifDrop-linux-x86_64.tar.gz
@@ -491,14 +503,17 @@ jobs:
 
       # ── Flutter app build (PowerShell) ───────────────────────────
       - uses: subosito/flutter-action@v2
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
 
       - name: Build Windows app
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: flutter build windows --release
 
       - name: Inject binaries into Windows bundle
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         shell: pwsh
         run: |
           $bundle = "build\windows\x64\runner\Release"
@@ -512,12 +527,14 @@ jobs:
           Get-Item "$bundle\data\gifski.dll"
 
       - name: Package Windows app
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         shell: pwsh
         run: |
           $bundle = "build\windows\x64\runner\Release"
           Compress-Archive -Path "$bundle\*" -DestinationPath "GifDrop-windows-x86_64.zip"
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         with:
           name: app-windows-x86_64
           path: GifDrop-windows-x86_64.zip
