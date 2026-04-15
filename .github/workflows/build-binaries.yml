@@ -16,7 +16,7 @@ env:
   FFMPEG_TARBALL_SHA256: "733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1"
   GIFSKI_VERSION: "1.34.0"
   FLUTTER_VERSION: "3.41.0"
-  NATIVE_CACHE_REV: "3"   # bump to force one-time rebuild
+  NATIVE_CACHE_REV: "4"   # bump to force one-time rebuild
 
 jobs:
   # ════════════════════════════════════════════════════════════════════
