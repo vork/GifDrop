@@ -116,17 +116,32 @@ class FfmpegService {
     int width = 0;
     int height = 0;
     double fps = 15;
-    final streamRegex = RegExp(r'Stream.*Video:.*?(\d{1,5})x(\d{1,5})');
-    final streamMatch = streamRegex.firstMatch(stderr);
-    if (streamMatch != null) {
-      width = int.parse(streamMatch.group(1)!);
-      height = int.parse(streamMatch.group(2)!);
-    } else {
-      // Fallback for odd ffmpeg stream formatting.
-      final fallbackResolution = RegExp(r'(\d{1,5})x(\d{1,5})').firstMatch(stderr);
-      if (fallbackResolution != null) {
-        width = int.parse(fallbackResolution.group(1)!);
-        height = int.parse(fallbackResolution.group(2)!);
+    final resolutionRegex = RegExp(r'(\d{2,5})x(\d{2,5})');
+    final streamLines = stderr
+        .split('\n')
+        .where((line) => line.contains('Stream') && line.contains('Video:'));
+    for (final line in streamLines) {
+      for (final match in resolutionRegex.allMatches(line)) {
+        final w = int.parse(match.group(1)!);
+        final h = int.parse(match.group(2)!);
+        if (w > 0 && h > 0) {
+          width = w;
+          height = h;
+          break;
+        }
+      }
+      if (width > 0 && height > 0) break;
+    }
+    if (width == 0 || height == 0) {
+      // Fallback for odd ffmpeg output formatting.
+      for (final match in resolutionRegex.allMatches(stderr)) {
+        final w = int.parse(match.group(1)!);
+        final h = int.parse(match.group(2)!);
+        if (w > 0 && h > 0) {
+          width = w;
+          height = h;
+          break;
+        }
       }
     }
     fps = parsePositive(RegExp(r'(\d+(?:\.\d+)?)\s+fps')) ??
@@ -164,7 +179,9 @@ class FfmpegService {
     ];
 
     final (exitCode, stderr) = await _runProcess(ffmpeg, args);
-    if (exitCode != 0) {
+    final outputFile = File(outputPath);
+    final producedFrame = outputFile.existsSync() && outputFile.lengthSync() > 0;
+    if (exitCode != 0 && !producedFrame) {
       throw Exception('Frame extraction failed (exit $exitCode):\n$stderr');
     }
     return outputPath;
@@ -185,7 +202,7 @@ class FfmpegService {
     return 0;
   }
 
-  /// Build the pre-processing filter chain (trim, fps, scale, crop).
+  /// Build the pre-processing filter chain (trim, fps, crop, scale).
   /// Per-video trim/crop comes from the [ConversionJob].
   /// [effectiveFps] overrides `settings.fps` — use to cap at source video fps.
   @visibleForTesting
@@ -209,17 +226,18 @@ class FfmpegService {
 
     parts.add('fps=$fps');
 
-    if (settings.width != null) {
-      parts.add('scale=${settings.width}:-2:flags=lanczos');
-    }
-
-    // Crop after scale so coordinates are relative to output resolution
+    // Crop before scale since crop coordinates come from source-resolution
+    // preview/editor state.
     if (job.hasCrop) {
       final w = job.cropWidth ?? 'iw';
       final h = job.cropHeight ?? 'ih';
       final x = job.cropX ?? 0;
       final y = job.cropY ?? 0;
       parts.add('crop=$w:$h:$x:$y');
+    }
+
+    if (settings.width != null) {
+      parts.add('scale=${settings.width}:-2:flags=lanczos');
     }
 
     return parts.join(',');

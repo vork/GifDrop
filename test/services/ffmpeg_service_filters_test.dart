@@ -68,7 +68,7 @@ void main() {
       expect(result, 'fps=20,crop=iw:ih:10:0');
     });
 
-    test('full pipeline: trim + fps + scale + crop', () {
+    test('full pipeline: trim + fps + crop + scale', () {
       final job = ConversionJob(
         inputPath: '/v.mp4',
         trimStartFrame: 5,
@@ -83,8 +83,8 @@ void main() {
       expect(
         result,
         'trim=start_frame=5:end_frame=50,setpts=PTS-STARTPTS,'
-        'fps=24,scale=640:-2:flags=lanczos,'
-        'crop=320:240:0:0',
+        'fps=24,crop=320:240:0:0,'
+        'scale=640:-2:flags=lanczos',
       );
     });
 
@@ -96,7 +96,7 @@ void main() {
       expect(result, 'fps=24');
     });
 
-    test('order is trim, fps, scale, crop', () {
+    test('order is trim, fps, crop, scale', () {
       final job = ConversionJob(
         inputPath: '/v.mp4',
         trimStartFrame: 0,
@@ -112,10 +112,10 @@ void main() {
       expect(parts[1], 'setpts=PTS-STARTPTS');
       // then fps
       expect(parts[2], startsWith('fps='));
-      // then scale
-      expect(parts[3], startsWith('scale='));
       // then crop
-      expect(parts[4], startsWith('crop='));
+      expect(parts[3], startsWith('crop='));
+      // then scale
+      expect(parts[4], startsWith('scale='));
     });
   });
 
