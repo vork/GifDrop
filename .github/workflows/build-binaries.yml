@@ -90,11 +90,32 @@ jobs:
         run: |
           ./ffmpeg-install/bin/ffmpeg -version
           file ./ffmpeg-install/bin/ffmpeg
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -decoders | tee ffmpeg-decoders.txt
+          for dec in h264 hevc vp9 av1 prores mpeg4; do
+            if ! rg "^\s*V\S*\s+${dec}\b" ffmpeg-decoders.txt; then
+              echo "Required decoder missing: ${dec}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -demuxers | tee ffmpeg-demuxers.txt
+          for dem in "mov,mp4,m4a,3gp,3g2,mj2" "matroska,webm" "avi"; do
+            if ! rg "${dem}" ffmpeg-demuxers.txt; then
+              echo "Required demuxer missing: ${dem}"
+              exit 1
+            fi
+          done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -encoders | tee ffmpeg-encoders.txt
           if ! rg "^\s*V\.\S+\s+png\b" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -filters | tee ffmpeg-filters.txt
+          for flt in fps scale crop trim setpts reverse concat split format colorkey; do
+            if ! rg -w "${flt}" ffmpeg-filters.txt; then
+              echo "Required filter missing: ${flt}"
+              exit 1
+            fi
+          done
           # Smoke test: ensure ffmpeg can actually emit a PNG frame.
           ./ffmpeg-install/bin/ffmpeg -hide_banner \
             -f lavfi -i "color=white:s=64x64:d=0.1" \
@@ -179,7 +200,14 @@ jobs:
 
       - name: Build macOS app
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
-        run: flutter build macos --release
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            flutter build macos --release \
+              --build-name "${GITHUB_REF_NAME#v}" \
+              --build-number "${GITHUB_RUN_NUMBER}"
+          else
+            flutter build macos --release
+          fi
 
       # ── Code-sign & notarize ────────────────────────────────────
       - name: Codesign app bundle
@@ -344,6 +372,36 @@ jobs:
           ./ffmpeg-install/bin/ffmpeg -version
           file ./ffmpeg-install/bin/ffmpeg
           ldd ./ffmpeg-install/bin/ffmpeg || echo "(static binary)"
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -decoders | tee ffmpeg-decoders.txt
+          for dec in h264 hevc vp9 av1 prores mpeg4; do
+            if ! rg "^\s*V\S*\s+${dec}\b" ffmpeg-decoders.txt; then
+              echo "Required decoder missing: ${dec}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -demuxers | tee ffmpeg-demuxers.txt
+          for dem in "mov,mp4,m4a,3gp,3g2,mj2" "matroska,webm" "avi"; do
+            if ! rg "${dem}" ffmpeg-demuxers.txt; then
+              echo "Required demuxer missing: ${dem}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -encoders | tee ffmpeg-encoders.txt
+          if ! rg "^\s*V\.\S+\s+png\b" ffmpeg-encoders.txt; then
+            echo "Required png encoder is missing from ffmpeg build"
+            exit 1
+          fi
+          ./ffmpeg-install/bin/ffmpeg -hide_banner -filters | tee ffmpeg-filters.txt
+          for flt in fps scale crop trim setpts reverse concat split format colorkey; do
+            if ! rg -w "${flt}" ffmpeg-filters.txt; then
+              echo "Required filter missing: ${flt}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg -hide_banner \
+            -f lavfi -i "color=white:s=64x64:d=0.1" \
+            -vframes 1 -c:v png -f image2 -y ffmpeg-smoke.png
+          test -s ffmpeg-smoke.png
 
       # ── gifski shared library from source ──────────────────────────
       - name: Clone & build gifski (shared library)
@@ -383,7 +441,14 @@ jobs:
 
       - name: Build Linux app
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
-        run: flutter build linux --release
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            flutter build linux --release \
+              --build-name "${GITHUB_REF_NAME#v}" \
+              --build-number "${GITHUB_RUN_NUMBER}"
+          else
+            flutter build linux --release
+          fi
 
       - name: Inject binaries into Linux bundle
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
@@ -476,7 +541,38 @@ jobs:
 
       - name: Verify ffmpeg
         shell: msys2 {0}
-        run: ./ffmpeg-install/bin/ffmpeg.exe -version
+        run: |
+          ./ffmpeg-install/bin/ffmpeg.exe -version
+          ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -decoders | tee ffmpeg-decoders.txt
+          for dec in h264 hevc vp9 av1 prores mpeg4; do
+            if ! rg "^\s*V\S*\s+${dec}\b" ffmpeg-decoders.txt; then
+              echo "Required decoder missing: ${dec}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -demuxers | tee ffmpeg-demuxers.txt
+          for dem in "mov,mp4,m4a,3gp,3g2,mj2" "matroska,webm" "avi"; do
+            if ! rg "${dem}" ffmpeg-demuxers.txt; then
+              echo "Required demuxer missing: ${dem}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -encoders | tee ffmpeg-encoders.txt
+          if ! rg "^\s*V\.\S+\s+png\b" ffmpeg-encoders.txt; then
+            echo "Required png encoder is missing from ffmpeg build"
+            exit 1
+          fi
+          ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -filters | tee ffmpeg-filters.txt
+          for flt in fps scale crop trim setpts reverse concat split format colorkey; do
+            if ! rg -w "${flt}" ffmpeg-filters.txt; then
+              echo "Required filter missing: ${flt}"
+              exit 1
+            fi
+          done
+          ./ffmpeg-install/bin/ffmpeg.exe -hide_banner \
+            -f lavfi -i "color=white:s=64x64:d=0.1" \
+            -vframes 1 -c:v png -f image2 -y ffmpeg-smoke.png
+          test -s ffmpeg-smoke.png
 
       # ── gifski shared library (built with Rust on Windows) ─────────
       - name: Install Rust toolchain
@@ -529,7 +625,12 @@ jobs:
 
       - name: Build Windows app
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
-        run: flutter build windows --release
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            flutter build windows --release --build-name "$($env:GITHUB_REF_NAME -replace '^v','')" --build-number "$env:GITHUB_RUN_NUMBER"
+          } else {
+            flutter build windows --release
+          }
 
       - name: Inject binaries into Windows bundle
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
