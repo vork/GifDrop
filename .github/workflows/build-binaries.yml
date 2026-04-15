@@ -116,9 +116,9 @@ jobs:
               exit 1
             fi
           done
-          # Smoke test: ensure ffmpeg can actually emit a PNG frame.
+          # Smoke test: ensure ffmpeg can decode and emit a PNG frame.
           ./ffmpeg-install/bin/ffmpeg -hide_banner \
-            -f lavfi -i "color=white:s=64x64:d=0.1" \
+            -i web/favicon.png \
             -vframes 1 -c:v png -f image2 -y ffmpeg-smoke.png
           test -s ffmpeg-smoke.png
           otool -L ./ffmpeg-install/bin/ffmpeg | tee ffmpeg-otool.txt
@@ -399,7 +399,7 @@ jobs:
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner \
-            -f lavfi -i "color=white:s=64x64:d=0.1" \
+            -i web/favicon.png \
             -vframes 1 -c:v png -f image2 -y ffmpeg-smoke.png
           test -s ffmpeg-smoke.png
 
@@ -570,7 +570,7 @@ jobs:
             fi
           done
           ./ffmpeg-install/bin/ffmpeg.exe -hide_banner \
-            -f lavfi -i "color=white:s=64x64:d=0.1" \
+            -i web/favicon.png \
             -vframes 1 -c:v png -f image2 -y ffmpeg-smoke.png
           test -s ffmpeg-smoke.png
 
