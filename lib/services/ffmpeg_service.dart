@@ -44,6 +44,41 @@ class FfmpegService {
     return _ffmpegPath!;
   }
 
+  Exception _formatFfmpegFailure(String phase, int exitCode, String stderr) {
+    String? hint;
+    if (stderr.contains('Library not loaded:')) {
+      hint =
+          'Bundled ffmpeg is missing a dynamic library dependency. Rebuild and package ffmpeg as self-contained/static.';
+    } else if (stderr.contains('No such filter:')) {
+      hint =
+          'Required ffmpeg filter is unavailable in the bundled binary. Check configure flags for filter support.';
+    } else if (stderr.contains('Unknown decoder') ||
+        stderr.contains('Decoder (codec') ||
+        stderr.contains('not implemented')) {
+      hint =
+          'Input codec is not supported by the bundled ffmpeg build. Enable needed decoders/demuxers.';
+    } else if (stderr.contains('Permission denied')) {
+      hint = 'Input file could not be read due to file permission restrictions.';
+    }
+
+    final lines = stderr
+        .split('\n')
+        .map((l) => l.trimRight())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final tail = lines.length <= 8 ? lines : lines.sublist(lines.length - 8);
+    final details = tail.join('\n');
+
+    final message = StringBuffer()
+      ..writeln('$phase failed (exit $exitCode).')
+      ..writeln('FFmpeg details:')
+      ..writeln(details);
+    if (hint != null) {
+      message.writeln('\nHint: $hint');
+    }
+    return Exception(message.toString().trim());
+  }
+
   /// Run a process, drain stderr, and return (exitCode, stderrText).
   /// If [cancelSignal] completes first, kills the process and throws [ConversionCancelledException].
   Future<(int, String)> _runProcess(
@@ -52,7 +87,16 @@ class FfmpegService {
     void Function(String chunk)? onStderr,
     Future<void>? cancelSignal,
   }) async {
-    final process = await Process.start(executable, args);
+    late final Process process;
+    try {
+      process = await Process.start(executable, args);
+    } on ProcessException catch (e) {
+      throw Exception(
+        'Failed to start ffmpeg process.\n'
+        'Executable: $executable\n'
+        'Error: ${e.message}',
+      );
+    }
 
     process.stdout.drain<void>();
 
@@ -184,7 +228,7 @@ class FfmpegService {
     final outputFile = File(outputPath);
     final producedFrame = outputFile.existsSync() && outputFile.lengthSync() > 0;
     if (exitCode != 0 && !producedFrame) {
-      throw Exception('Frame extraction failed (exit $exitCode):\n$stderr');
+      throw _formatFfmpegFailure('Frame extraction', exitCode, stderr);
     }
     return outputPath;
   }
@@ -328,7 +372,7 @@ class FfmpegService {
     }, cancelSignal: cancelSignal);
 
     if (exitCode != 0) {
-      throw Exception('Frame extraction failed (exit $exitCode):\n$stderr');
+      throw _formatFfmpegFailure('Frame extraction', exitCode, stderr);
     }
 
     final frames = Directory(frameDir)

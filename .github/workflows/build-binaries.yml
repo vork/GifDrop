@@ -16,6 +16,7 @@ env:
   FFMPEG_TARBALL_SHA256: "733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1"
   GIFSKI_VERSION: "1.34.0"
   FLUTTER_VERSION: "3.41.0"
+  NATIVE_CACHE_REV: "2"   # bump to force one-time rebuild
 
 jobs:
   # ════════════════════════════════════════════════════════════════════
@@ -30,7 +31,7 @@ jobs:
         uses: actions/cache@v4
         id: restore-build
         with:
-          key: ffmpeg-gifski-macos-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}
+          key: ffmpeg-gifski-macos-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}-r${{ env.NATIVE_CACHE_REV }}
           path: build-cache
 
       - name: Use restored binaries
@@ -69,10 +70,12 @@ jobs:
             --prefix="$(pwd)/../ffmpeg-install" \
             --disable-doc --disable-htmlpages --disable-manpages \
             --disable-podpages --disable-txtpages \
+            --disable-autodetect \
             --disable-network \
             --disable-programs --enable-ffmpeg \
             --enable-static --disable-shared \
             --disable-debug --enable-small \
+            --disable-libxcb --disable-xlib \
             --disable-encoders \
             --enable-encoder=gif --enable-encoder=png --enable-encoder=rawvideo \
             --disable-muxers \
@@ -86,6 +89,11 @@ jobs:
         run: |
           ./ffmpeg-install/bin/ffmpeg -version
           file ./ffmpeg-install/bin/ffmpeg
+          otool -L ./ffmpeg-install/bin/ffmpeg | tee ffmpeg-otool.txt
+          if rg "/opt/homebrew|/usr/local/opt|libX11" ffmpeg-otool.txt; then
+            echo "Unexpected external ffmpeg linkage detected"
+            exit 1
+          fi
 
       # ── gifski shared library from source ──────────────────────────
       - name: Clone & build gifski (shared library)
@@ -266,7 +274,7 @@ jobs:
         uses: actions/cache@v4
         id: restore-build
         with:
-          key: ffmpeg-gifski-linux-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}
+          key: ffmpeg-gifski-linux-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}-r${{ env.NATIVE_CACHE_REV }}
           path: build-cache
 
       - name: Use restored binaries
@@ -403,7 +411,7 @@ jobs:
         uses: actions/cache@v4
         id: restore-build
         with:
-          key: ffmpeg-gifski-windows-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}
+          key: ffmpeg-gifski-windows-${{ env.FFMPEG_VERSION }}-${{ env.GIFSKI_VERSION }}-r${{ env.NATIVE_CACHE_REV }}
           path: build-cache
 
       # ── Build ffmpeg in MSYS2 ───────────────────────────────────

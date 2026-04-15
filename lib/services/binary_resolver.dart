@@ -33,6 +33,16 @@ class BinaryResolver {
       return bundled;
     }
 
+    // Do not silently fall back to a system ffmpeg. We need deterministic
+    // behavior across local/dev/release builds and clear packaging failures.
+    if (binaryName == 'ffmpeg') {
+      throw Exception(
+        'Bundled ffmpeg not found at:\n'
+        '  $bundled\n'
+        'This app requires the bundled ffmpeg binary and will not use system PATH.',
+      );
+    }
+
     final systemPath = await _findInPath(binaryName);
     if (systemPath != null) {
       return systemPath;
