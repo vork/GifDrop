@@ -75,6 +75,12 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
 
   // Track temp files for cleanup
   final List<String> _tempFiles = [];
+  String? _frameError;
+
+  final _cropXController = TextEditingController();
+  final _cropYController = TextEditingController();
+  final _cropWController = TextEditingController();
+  final _cropHController = TextEditingController();
 
   double get _safeFps {
     final fps = _videoInfo?.fps ?? 0;
@@ -109,7 +115,57 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
         (job.cropWidth ?? 0).toDouble(),
         (job.cropHeight ?? 0).toDouble(),
       );
+      _syncCropInputsFromRect();
     }
+  }
+
+  void _syncCropInputsFromRect() {
+    if (_cropRect == null) return;
+    _cropXController.text = _cropRect!.left.round().toString();
+    _cropYController.text = _cropRect!.top.round().toString();
+    _cropWController.text = _cropRect!.width.round().toString();
+    _cropHController.text = _cropRect!.height.round().toString();
+  }
+
+  Rect _clampCropRect(Rect rect, VideoInfo info) {
+    final maxW = info.width.toDouble().clamp(1, double.infinity);
+    final maxH = info.height.toDouble().clamp(1, double.infinity);
+    final x = rect.left.clamp(0.0, maxW - 1).toDouble();
+    final y = rect.top.clamp(0.0, maxH - 1).toDouble();
+    final w = rect.width.clamp(1.0, maxW - x).toDouble();
+    final h = rect.height.clamp(1.0, maxH - y).toDouble();
+    return Rect.fromLTWH(x, y, w, h);
+  }
+
+  void _applyManualCropValues() {
+    final info = _videoInfo;
+    if (info == null) return;
+
+    final x = int.tryParse(_cropXController.text.trim());
+    final y = int.tryParse(_cropYController.text.trim());
+    final w = int.tryParse(_cropWController.text.trim());
+    final h = int.tryParse(_cropHController.text.trim());
+    if (x == null || y == null || w == null || h == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Crop values must be whole numbers')),
+      );
+      return;
+    }
+    if (x < 0 || y < 0 || w <= 0 || h <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Use x/y >= 0 and w/h > 0')),
+      );
+      return;
+    }
+
+    setState(() {
+      _cropAspectRatio = null;
+      _cropRect = _clampCropRect(
+        Rect.fromLTWH(x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble()),
+        info,
+      );
+      _syncCropInputsFromRect();
+    });
   }
 
   Future<void> _loadVideoInfo() async {
@@ -127,6 +183,10 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
         _trimStart = _trimStart.clamp(0, maxFrame).toInt();
         _trimEnd = _trimEnd.clamp(_trimStart, info.totalFrames).toInt();
         _currentFrame = _trimStart.clamp(0, maxFrame).toInt();
+        if (_cropRect != null) {
+          _cropRect = _clampCropRect(_cropRect!, info);
+          _syncCropInputsFromRect();
+        }
       });
       _extractCurrentFrame();
     } catch (e) {
@@ -142,7 +202,10 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 100), () async {
       if (!mounted || _videoInfo == null) return;
-      setState(() => _extractingFrame = true);
+      setState(() {
+        _extractingFrame = true;
+        _frameError = null;
+      });
       try {
         final timeSeconds = _currentFrame / _safeFps;
         final path = await widget.ffmpegService
@@ -152,10 +215,14 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
         setState(() {
           _framePath = path;
           _extractingFrame = false;
+          _frameError = null;
         });
       } catch (e) {
         if (!mounted) return;
-        setState(() => _extractingFrame = false);
+        setState(() {
+          _extractingFrame = false;
+          _frameError = e.toString();
+        });
       }
     });
   }
@@ -242,6 +309,10 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
         File(path).deleteSync();
       } catch (_) {}
     }
+    _cropXController.dispose();
+    _cropYController.dispose();
+    _cropWController.dispose();
+    _cropHController.dispose();
     super.dispose();
   }
 
@@ -364,7 +435,33 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
             color: Colors.black,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Center(child: CircularProgressIndicator()),
+          child: Center(
+            child: _extractingFrame
+                ? const CircularProgressIndicator()
+                : Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: Colors.white70, size: 24),
+                        const SizedBox(height: 8),
+                        Text(
+                          _frameError ?? 'Could not load preview frame',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white70),
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton(
+                          onPressed: _extractCurrentFrame,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
         ),
       );
     }
@@ -427,7 +524,11 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                         initialCrop: _cropRect,
                         aspectRatio: _cropAspectRatio,
                         onCropChanged: (rect) {
-                          _cropRect = rect;
+                          if (!mounted) return;
+                          setState(() {
+                            _cropRect = rect;
+                            _syncCropInputsFromRect();
+                          });
                         },
                       ),
                   ],
@@ -584,7 +685,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                 if (_videoInfo != null) ...[
                   const SizedBox(width: 12),
                   Text(
-                    _formatTime(_currentFrame / _videoInfo!.fps),
+                    _formatTime(_currentFrame / _safeFps),
                     style: interactiveStyle,
                   ),
                 ],
@@ -708,7 +809,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
               if (_videoInfo != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Duration: ${_formatTime((_trimEnd - _trimStart) / _videoInfo!.fps)} '
+                  'Duration: ${_formatTime((_trimEnd - _trimStart) / _safeFps)} '
                   '(${_trimEnd - _trimStart} frames)',
                   style: subtitleStyle,
                 ),
@@ -717,6 +818,43 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildManualCropInputs(ThemeData theme) {
+    InputDecoration inputDecoration(String label) => InputDecoration(
+      labelText: label,
+      isDense: true,
+      border: const OutlineInputBorder(),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+    );
+
+    Widget sizedField(TextEditingController controller, String label) {
+      return SizedBox(
+        width: 88,
+        child: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: inputDecoration(label),
+          onSubmitted: (_) => _applyManualCropValues(),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        sizedField(_cropXController, 'X'),
+        sizedField(_cropYController, 'Y'),
+        sizedField(_cropWController, 'W'),
+        sizedField(_cropHController, 'H'),
+        FilledButton(
+          onPressed: _applyManualCropValues,
+          child: const Text('Apply Values'),
+        ),
+      ],
     );
   }
 
@@ -764,6 +902,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                         _videoInfo!.width.toDouble(),
                         _videoInfo!.height.toDouble(),
                       );
+                      _syncCropInputsFromRect();
                     }
                   }),
                 ),
@@ -772,7 +911,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
             if (_cropEnabled) ...[
               const SizedBox(height: 8),
               Text(
-                'Drag the rectangle on the preview to select the crop region.',
+                'Drag the rectangle on the preview or enter X/Y/W/H manually.',
                 style: subtitleStyle,
               ),
               const SizedBox(height: 10),
@@ -809,6 +948,8 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                _buildManualCropInputs(theme),
               ],
               const SizedBox(height: 8),
               OutlinedButton.icon(
@@ -822,6 +963,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                             _videoInfo!.width.toDouble(),
                             _videoInfo!.height.toDouble(),
                           );
+                          _syncCropInputsFromRect();
                         });
                       }
                     : null,

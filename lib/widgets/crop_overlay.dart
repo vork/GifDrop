@@ -48,24 +48,31 @@ class _CropOverlayState extends State<CropOverlay> {
   double get _scaleX => widget.displaySize.width / widget.imageSize.width;
   double get _scaleY => widget.displaySize.height / widget.imageSize.height;
 
+  Rect _displayRectFromInitialCrop(Rect? crop) {
+    if (crop == null) return Offset.zero & widget.displaySize;
+    return _clampRect(
+      Rect.fromLTWH(
+        crop.left * _scaleX,
+        crop.top * _scaleY,
+        crop.width * _scaleX,
+        crop.height * _scaleY,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.initialCrop != null) {
-      _cropRect = Rect.fromLTWH(
-        widget.initialCrop!.left * _scaleX,
-        widget.initialCrop!.top * _scaleY,
-        widget.initialCrop!.width * _scaleX,
-        widget.initialCrop!.height * _scaleY,
-      );
-    } else {
-      _cropRect = Offset.zero & widget.displaySize;
-    }
+    _cropRect = _displayRectFromInitialCrop(widget.initialCrop);
   }
 
   @override
   void didUpdateWidget(CropOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialCrop != widget.initialCrop ||
+        oldWidget.imageSize != widget.imageSize) {
+      _cropRect = _displayRectFromInitialCrop(widget.initialCrop);
+    }
     if (oldWidget.displaySize != widget.displaySize) {
       final oldScaleX =
           oldWidget.displaySize.width / oldWidget.imageSize.width;
@@ -84,6 +91,7 @@ class _CropOverlayState extends State<CropOverlay> {
         imgRect.width * _scaleX,
         imgRect.height * _scaleY,
       );
+      _cropRect = _clampRect(_cropRect);
     }
     // When aspect ratio changes, adjust crop to match
     if (oldWidget.aspectRatio != widget.aspectRatio &&
