@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gif_converter/models/conversion_job.dart';
 import 'package:gif_converter/widgets/video_edit_dialog.dart';
 
 void main() {
@@ -12,6 +13,7 @@ void main() {
       expect(result.cropWidth, isNull);
       expect(result.cropHeight, isNull);
       expect(result.playbackSpeed, 1.0);
+      expect(result.transparencyKeyMode, TransparencyKeyMode.none);
       expect(result.applyToAll, false);
     });
 
@@ -47,6 +49,13 @@ void main() {
       expect(result.playbackSpeed, 1.5);
     });
 
+    test('stores transparency key mode', () {
+      const result = VideoEditResult(
+        transparencyKeyMode: TransparencyKeyMode.white,
+      );
+      expect(result.transparencyKeyMode, TransparencyKeyMode.white);
+    });
+
     test('stores all values together', () {
       const result = VideoEditResult(
         trimStartFrame: 5,
@@ -56,6 +65,7 @@ void main() {
         cropWidth: 300,
         cropHeight: 200,
         playbackSpeed: 0.75,
+        transparencyKeyMode: TransparencyKeyMode.black,
         applyToAll: true,
       );
       expect(result.trimStartFrame, 5);
@@ -65,6 +75,7 @@ void main() {
       expect(result.cropWidth, 300);
       expect(result.cropHeight, 200);
       expect(result.playbackSpeed, 0.75);
+      expect(result.transparencyKeyMode, TransparencyKeyMode.black);
       expect(result.applyToAll, true);
     });
   });

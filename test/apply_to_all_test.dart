@@ -13,6 +13,7 @@ void applyResult(VideoEditResult result, List<ConversionJob> jobs) {
     target.cropWidth = result.cropWidth;
     target.cropHeight = result.cropHeight;
     target.playbackSpeed = result.playbackSpeed;
+    target.transparencyKeyMode = result.transparencyKeyMode;
     if (target.status == ConversionJobStatus.done ||
         target.status == ConversionJobStatus.error) {
       target.status = ConversionJobStatus.pending;
@@ -52,6 +53,7 @@ void main() {
         expect(job.cropWidth, 640);
         expect(job.cropHeight, 480);
         expect(job.playbackSpeed, 1.0);
+        expect(job.transparencyKeyMode, TransparencyKeyMode.none);
       }
     });
 
@@ -151,6 +153,23 @@ void main() {
       applyResult(result, jobs);
       for (final job in jobs) {
         expect(job.playbackSpeed, 1.8);
+      }
+    });
+
+    test('applies transparency key mode to all jobs', () {
+      final jobs = [
+        ConversionJob(inputPath: '/a.mp4'),
+        ConversionJob(inputPath: '/b.mp4'),
+      ];
+
+      const result = VideoEditResult(
+        transparencyKeyMode: TransparencyKeyMode.white,
+        applyToAll: true,
+      );
+
+      applyResult(result, jobs);
+      for (final job in jobs) {
+        expect(job.transparencyKeyMode, TransparencyKeyMode.white);
       }
     });
   });

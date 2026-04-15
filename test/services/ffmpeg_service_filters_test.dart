@@ -118,6 +118,26 @@ void main() {
       );
     });
 
+    test('adds white transparency key filter when enabled', () {
+      final job = ConversionJob(
+        inputPath: '/v.mp4',
+        transparencyKeyMode: TransparencyKeyMode.white,
+      );
+      const settings = ConversionSettings(fps: 20);
+      final result = service.buildPreFilters(settings, job);
+      expect(result, 'fps=20,format=rgba,colorkey=white:0.030:0.120');
+    });
+
+    test('adds black transparency key filter when enabled', () {
+      final job = ConversionJob(
+        inputPath: '/v.mp4',
+        transparencyKeyMode: TransparencyKeyMode.black,
+      );
+      const settings = ConversionSettings(fps: 20);
+      final result = service.buildPreFilters(settings, job);
+      expect(result, 'fps=20,format=rgba,colorkey=black:0.030:0.120');
+    });
+
     test('order is trim, fps, crop, scale', () {
       final job = ConversionJob(
         inputPath: '/v.mp4',

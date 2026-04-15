@@ -15,6 +15,7 @@ class VideoEditResult {
   final int? cropWidth;
   final int? cropHeight;
   final double playbackSpeed;
+  final TransparencyKeyMode transparencyKeyMode;
   final bool applyToAll;
 
   const VideoEditResult({
@@ -25,6 +26,7 @@ class VideoEditResult {
     this.cropWidth,
     this.cropHeight,
     this.playbackSpeed = 1.0,
+    this.transparencyKeyMode = TransparencyKeyMode.none,
     this.applyToAll = false,
   });
 }
@@ -67,6 +69,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
   bool _cropEnabled = false;
   double? _cropAspectRatio; // null = free
   double _playbackSpeed = 1.0;
+  TransparencyKeyMode _transparencyKeyMode = TransparencyKeyMode.none;
 
   // Preview playback
   bool _previewing = false;
@@ -111,6 +114,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
     _trimEnabled = job.hasTrim;
     _cropEnabled = job.hasCrop;
     _playbackSpeed = job.playbackSpeed;
+    _transparencyKeyMode = job.transparencyKeyMode;
     if (job.trimStartFrame != null) _trimStart = job.trimStartFrame!;
     if (job.hasCrop) {
       _cropRect = Rect.fromLTWH(
@@ -340,6 +344,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
           ? _cropRect!.height.round()
           : null,
       playbackSpeed: _playbackSpeed,
+      transparencyKeyMode: _transparencyKeyMode,
       applyToAll: applyToAll,
     );
   }
@@ -420,6 +425,8 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                     _buildTrimControls(theme),
                     const SizedBox(height: 16),
                     _buildSpeedControls(theme),
+                    const SizedBox(height: 16),
+                    _buildTransparencyControls(theme),
                     const SizedBox(height: 16),
                     _buildCropControls(theme),
                   ],
@@ -942,6 +949,75 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                   onSelected: (_) {
                     setState(() {
                       _playbackSpeed = speed;
+                    });
+                  },
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransparencyControls(ThemeData theme) {
+    final boldLabel = GoogleFonts.dmSans(
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+      color: theme.colorScheme.onSurface,
+    );
+    final subtitleStyle = GoogleFonts.dmSans(
+      fontSize: 12,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    String labelForMode(TransparencyKeyMode mode) {
+      switch (mode) {
+        case TransparencyKeyMode.none:
+          return 'Off';
+        case TransparencyKeyMode.white:
+          return 'White -> Transparent';
+        case TransparencyKeyMode.black:
+          return 'Black -> Transparent';
+      }
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.opacity, size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('Transparency Key', style: boldLabel),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Map white/black backgrounds to transparency with slight edge feathering.',
+              style: subtitleStyle,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: TransparencyKeyMode.values.map((mode) {
+                return ChoiceChip(
+                  label: Text(labelForMode(mode)),
+                  selected: _transparencyKeyMode == mode,
+                  onSelected: (_) {
+                    setState(() {
+                      _transparencyKeyMode = mode;
                     });
                   },
                   visualDensity: VisualDensity.compact,

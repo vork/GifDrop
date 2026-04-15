@@ -36,6 +36,8 @@ class VideoInfo {
 
 class FfmpegService {
   String? _ffmpegPath;
+  static const double _transparencyKeySimilarity = 0.030;
+  static const double _transparencyKeyBlend = 0.120;
 
   Future<String> get ffmpegPath async {
     _ffmpegPath ??= await BinaryResolver.resolve('ffmpeg');
@@ -202,7 +204,7 @@ class FfmpegService {
     return 0;
   }
 
-  /// Build the pre-processing filter chain (trim, fps, crop, scale).
+  /// Build the pre-processing filter chain (trim, fps, crop, scale, keying).
   /// Per-video trim/crop comes from the [ConversionJob].
   /// [effectiveFps] overrides `settings.fps` — use to cap at source video fps.
   @visibleForTesting
@@ -246,6 +248,17 @@ class FfmpegService {
 
     if (settings.width != null) {
       parts.add('scale=${settings.width}:-2:flags=lanczos');
+    }
+
+    if (job.transparencyKeyMode != TransparencyKeyMode.none) {
+      final color =
+          job.transparencyKeyMode == TransparencyKeyMode.white ? 'white' : 'black';
+      parts.add('format=rgba');
+      // Soft keying: low similarity avoids punching holes into subject,
+      // non-zero blend adds slight feathering to reduce jagged outlines.
+      parts.add(
+        'colorkey=$color:${_transparencyKeySimilarity.toStringAsFixed(3)}:${_transparencyKeyBlend.toStringAsFixed(3)}',
+      );
     }
 
     return parts.join(',');

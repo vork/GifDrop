@@ -6,6 +6,12 @@ enum ConversionJobStatus {
   error,
 }
 
+enum TransparencyKeyMode {
+  none,
+  white,
+  black,
+}
+
 class ConversionJob {
   final String inputPath;
   ConversionJobStatus status;
@@ -30,6 +36,9 @@ class ConversionJob {
 
   // Per-video playback speed multiplier (1.0 = original speed)
   double playbackSpeed;
+
+  // Per-video transparency keying mode.
+  TransparencyKeyMode transparencyKeyMode;
 
   bool get hasTrim => trimStartFrame != null || trimEndFrame != null;
   bool get hasCrop =>
@@ -70,5 +79,6 @@ class ConversionJob {
     this.cropWidth,
     this.cropHeight,
     this.playbackSpeed = 1.0,
+    this.transparencyKeyMode = TransparencyKeyMode.none,
   });
 }
