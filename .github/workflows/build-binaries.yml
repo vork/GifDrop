@@ -92,26 +92,26 @@ jobs:
           file ./ffmpeg-install/bin/ffmpeg
           ./ffmpeg-install/bin/ffmpeg -hide_banner -decoders | tee ffmpeg-decoders.txt
           for dec in h264 hevc vp9 av1 prores mpeg4; do
-            if ! rg "^\s*V\S*\s+${dec}\b" ffmpeg-decoders.txt; then
+            if ! grep -Eq "^[[:space:]]*V[^[:space:]]*[[:space:]]+${dec}([[:space:]]|$)" ffmpeg-decoders.txt; then
               echo "Required decoder missing: ${dec}"
               exit 1
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -demuxers | tee ffmpeg-demuxers.txt
           for dem in "mov,mp4,m4a,3gp,3g2,mj2" "matroska,webm" "avi"; do
-            if ! rg "${dem}" ffmpeg-demuxers.txt; then
+            if ! grep -Fq "${dem}" ffmpeg-demuxers.txt; then
               echo "Required demuxer missing: ${dem}"
               exit 1
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -encoders | tee ffmpeg-encoders.txt
-          if ! rg "^\s*V\.\S+\s+png\b" ffmpeg-encoders.txt; then
+          if ! grep -Eq "^[[:space:]]*V\\.[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
           ./ffmpeg-install/bin/ffmpeg -hide_banner -filters | tee ffmpeg-filters.txt
           for flt in fps scale crop trim setpts reverse concat split format colorkey; do
-            if ! rg -w "${flt}" ffmpeg-filters.txt; then
+            if ! grep -Ewq "${flt}" ffmpeg-filters.txt; then
               echo "Required filter missing: ${flt}"
               exit 1
             fi
@@ -122,7 +122,7 @@ jobs:
             -vframes 1 -c:v png -f image2 -y ffmpeg-smoke.png
           test -s ffmpeg-smoke.png
           otool -L ./ffmpeg-install/bin/ffmpeg | tee ffmpeg-otool.txt
-          if rg "/opt/homebrew|/usr/local/opt|libX11" ffmpeg-otool.txt; then
+          if grep -E "/opt/homebrew|/usr/local/opt|libX11" ffmpeg-otool.txt >/dev/null; then
             echo "Unexpected external ffmpeg linkage detected"
             exit 1
           fi
@@ -374,26 +374,26 @@ jobs:
           ldd ./ffmpeg-install/bin/ffmpeg || echo "(static binary)"
           ./ffmpeg-install/bin/ffmpeg -hide_banner -decoders | tee ffmpeg-decoders.txt
           for dec in h264 hevc vp9 av1 prores mpeg4; do
-            if ! rg "^\s*V\S*\s+${dec}\b" ffmpeg-decoders.txt; then
+            if ! grep -Eq "^[[:space:]]*V[^[:space:]]*[[:space:]]+${dec}([[:space:]]|$)" ffmpeg-decoders.txt; then
               echo "Required decoder missing: ${dec}"
               exit 1
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -demuxers | tee ffmpeg-demuxers.txt
           for dem in "mov,mp4,m4a,3gp,3g2,mj2" "matroska,webm" "avi"; do
-            if ! rg "${dem}" ffmpeg-demuxers.txt; then
+            if ! grep -Fq "${dem}" ffmpeg-demuxers.txt; then
               echo "Required demuxer missing: ${dem}"
               exit 1
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -encoders | tee ffmpeg-encoders.txt
-          if ! rg "^\s*V\.\S+\s+png\b" ffmpeg-encoders.txt; then
+          if ! grep -Eq "^[[:space:]]*V\\.[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
           ./ffmpeg-install/bin/ffmpeg -hide_banner -filters | tee ffmpeg-filters.txt
           for flt in fps scale crop trim setpts reverse concat split format colorkey; do
-            if ! rg -w "${flt}" ffmpeg-filters.txt; then
+            if ! grep -Ewq "${flt}" ffmpeg-filters.txt; then
               echo "Required filter missing: ${flt}"
               exit 1
             fi
@@ -545,26 +545,26 @@ jobs:
           ./ffmpeg-install/bin/ffmpeg.exe -version
           ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -decoders | tee ffmpeg-decoders.txt
           for dec in h264 hevc vp9 av1 prores mpeg4; do
-            if ! rg "^\s*V\S*\s+${dec}\b" ffmpeg-decoders.txt; then
+            if ! grep -Eq "^[[:space:]]*V[^[:space:]]*[[:space:]]+${dec}([[:space:]]|$)" ffmpeg-decoders.txt; then
               echo "Required decoder missing: ${dec}"
               exit 1
             fi
           done
           ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -demuxers | tee ffmpeg-demuxers.txt
           for dem in "mov,mp4,m4a,3gp,3g2,mj2" "matroska,webm" "avi"; do
-            if ! rg "${dem}" ffmpeg-demuxers.txt; then
+            if ! grep -Fq "${dem}" ffmpeg-demuxers.txt; then
               echo "Required demuxer missing: ${dem}"
               exit 1
             fi
           done
           ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -encoders | tee ffmpeg-encoders.txt
-          if ! rg "^\s*V\.\S+\s+png\b" ffmpeg-encoders.txt; then
+          if ! grep -Eq "^[[:space:]]*V\\.[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
           ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -filters | tee ffmpeg-filters.txt
           for flt in fps scale crop trim setpts reverse concat split format colorkey; do
-            if ! rg -w "${flt}" ffmpeg-filters.txt; then
+            if ! grep -Ewq "${flt}" ffmpeg-filters.txt; then
               echo "Required filter missing: ${flt}"
               exit 1
             fi
