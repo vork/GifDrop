@@ -52,6 +52,11 @@ class FfmpegService {
     } else if (stderr.contains('No such filter:')) {
       hint =
           'Required ffmpeg filter is unavailable in the bundled binary. Check configure flags for filter support.';
+    } else if (stderr.contains("Unknown encoder 'png'") ||
+        stderr.contains('Default encoder for format image2') ||
+        stderr.contains('Encoder not found')) {
+      hint =
+          'Bundled ffmpeg is missing PNG encoder support. Ensure ffmpeg is built with PNG encoder (and zlib) enabled.';
     } else if (stderr.contains('Unknown decoder') ||
         stderr.contains('Decoder (codec') ||
         stderr.contains('not implemented')) {
