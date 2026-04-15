@@ -14,6 +14,7 @@ class VideoEditResult {
   final int? cropY;
   final int? cropWidth;
   final int? cropHeight;
+  final double playbackSpeed;
   final bool applyToAll;
 
   const VideoEditResult({
@@ -23,6 +24,7 @@ class VideoEditResult {
     this.cropY,
     this.cropWidth,
     this.cropHeight,
+    this.playbackSpeed = 1.0,
     this.applyToAll = false,
   });
 }
@@ -64,6 +66,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
   Rect? _cropRect; // in image pixel coordinates
   bool _cropEnabled = false;
   double? _cropAspectRatio; // null = free
+  double _playbackSpeed = 1.0;
 
   // Preview playback
   bool _previewing = false;
@@ -107,6 +110,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
     final job = widget.job;
     _trimEnabled = job.hasTrim;
     _cropEnabled = job.hasCrop;
+    _playbackSpeed = job.playbackSpeed;
     if (job.trimStartFrame != null) _trimStart = job.trimStartFrame!;
     if (job.hasCrop) {
       _cropRect = Rect.fromLTWH(
@@ -335,6 +339,7 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
       cropHeight: _cropEnabled && _cropRect != null
           ? _cropRect!.height.round()
           : null,
+      playbackSpeed: _playbackSpeed,
       applyToAll: applyToAll,
     );
   }
@@ -413,6 +418,8 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
                     _buildScrubber(theme),
                     const SizedBox(height: 20),
                     _buildTrimControls(theme),
+                    const SizedBox(height: 16),
+                    _buildSpeedControls(theme),
                     const SizedBox(height: 16),
                     _buildCropControls(theme),
                   ],
@@ -855,6 +862,95 @@ class _VideoEditDialogState extends State<VideoEditDialog> {
           child: const Text('Apply Values'),
         ),
       ],
+    );
+  }
+
+  Widget _buildSpeedControls(ThemeData theme) {
+    final boldLabel = GoogleFonts.dmSans(
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+      color: theme.colorScheme.onSurface,
+    );
+    final subtitleStyle = GoogleFonts.dmSans(
+      fontSize: 12,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final interactiveStyle = GoogleFonts.staatliches(
+      fontSize: 14,
+      color: theme.colorScheme.onSurface,
+    );
+    final speedLabel = _playbackSpeed == 1.0
+        ? '1.00x (Original)'
+        : '${_playbackSpeed.toStringAsFixed(2)}x';
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.slow_motion_video,
+                    size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('Speed', style: boldLabel),
+                const Spacer(),
+                Text(speedLabel, style: interactiveStyle),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Adjust playback speed before GIF conversion (slower or faster).',
+              style: subtitleStyle,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text('0.25x', style: subtitleStyle),
+                Expanded(
+                  child: Slider(
+                    value: _playbackSpeed,
+                    min: 0.25,
+                    max: 3.0,
+                    divisions: 55,
+                    label: _playbackSpeed.toStringAsFixed(2),
+                    onChanged: (v) {
+                      setState(() {
+                        _playbackSpeed = double.parse(v.toStringAsFixed(2));
+                      });
+                    },
+                  ),
+                ),
+                Text('3.00x', style: subtitleStyle),
+              ],
+            ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) {
+                final selected = (_playbackSpeed - speed).abs() < 0.005;
+                return ChoiceChip(
+                  label: Text('${speed.toStringAsFixed(2)}x'),
+                  selected: selected,
+                  onSelected: (_) {
+                    setState(() {
+                      _playbackSpeed = speed;
+                    });
+                  },
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

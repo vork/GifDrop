@@ -11,6 +11,7 @@ void main() {
       expect(result.cropY, isNull);
       expect(result.cropWidth, isNull);
       expect(result.cropHeight, isNull);
+      expect(result.playbackSpeed, 1.0);
       expect(result.applyToAll, false);
     });
 
@@ -41,6 +42,11 @@ void main() {
       expect(result.applyToAll, true);
     });
 
+    test('stores playback speed', () {
+      const result = VideoEditResult(playbackSpeed: 1.5);
+      expect(result.playbackSpeed, 1.5);
+    });
+
     test('stores all values together', () {
       const result = VideoEditResult(
         trimStartFrame: 5,
@@ -49,6 +55,7 @@ void main() {
         cropY: 20,
         cropWidth: 300,
         cropHeight: 200,
+        playbackSpeed: 0.75,
         applyToAll: true,
       );
       expect(result.trimStartFrame, 5);
@@ -57,6 +64,7 @@ void main() {
       expect(result.cropY, 20);
       expect(result.cropWidth, 300);
       expect(result.cropHeight, 200);
+      expect(result.playbackSpeed, 0.75);
       expect(result.applyToAll, true);
     });
   });

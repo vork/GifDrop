@@ -96,6 +96,28 @@ void main() {
       expect(result, 'fps=24');
     });
 
+    test('applies speed change without trim', () {
+      final job = ConversionJob(inputPath: '/v.mp4', playbackSpeed: 1.5);
+      const settings = ConversionSettings(fps: 20);
+      final result = service.buildPreFilters(settings, job);
+      expect(result, 'setpts=PTS/1.500,fps=20');
+    });
+
+    test('applies speed change with trim', () {
+      final job = ConversionJob(
+        inputPath: '/v.mp4',
+        trimStartFrame: 10,
+        trimEndFrame: 100,
+        playbackSpeed: 0.5,
+      );
+      const settings = ConversionSettings(fps: 20);
+      final result = service.buildPreFilters(settings, job);
+      expect(
+        result,
+        'trim=start_frame=10:end_frame=100,setpts=(PTS-STARTPTS)/0.500,fps=20',
+      );
+    });
+
     test('order is trim, fps, crop, scale', () {
       final job = ConversionJob(
         inputPath: '/v.mp4',

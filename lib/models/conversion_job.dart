@@ -28,6 +28,9 @@ class ConversionJob {
   int? cropWidth;
   int? cropHeight;
 
+  // Per-video playback speed multiplier (1.0 = original speed)
+  double playbackSpeed;
+
   bool get hasTrim => trimStartFrame != null || trimEndFrame != null;
   bool get hasCrop =>
       cropX != null || cropY != null || cropWidth != null || cropHeight != null;
@@ -66,5 +69,6 @@ class ConversionJob {
     this.cropY,
     this.cropWidth,
     this.cropHeight,
+    this.playbackSpeed = 1.0,
   });
 }

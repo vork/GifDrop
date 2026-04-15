@@ -210,6 +210,8 @@ class FfmpegService {
       {int? effectiveFps}) {
     final fps = effectiveFps ?? settings.fps;
     final parts = <String>[];
+    final speed = job.playbackSpeed <= 0 ? 1.0 : job.playbackSpeed;
+    final speedStr = speed.toStringAsFixed(3);
 
     // Trim must come first (before any resampling)
     if (job.hasTrim) {
@@ -221,7 +223,13 @@ class FfmpegService {
         trimParts.add('end_frame=${job.trimEndFrame}');
       }
       parts.add('trim=${trimParts.join(':')}');
-      parts.add('setpts=PTS-STARTPTS');
+      if ((speed - 1.0).abs() > 0.001) {
+        parts.add('setpts=(PTS-STARTPTS)/$speedStr');
+      } else {
+        parts.add('setpts=PTS-STARTPTS');
+      }
+    } else if ((speed - 1.0).abs() > 0.001) {
+      parts.add('setpts=PTS/$speedStr');
     }
 
     parts.add('fps=$fps');

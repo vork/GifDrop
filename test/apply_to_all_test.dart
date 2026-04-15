@@ -12,6 +12,7 @@ void applyResult(VideoEditResult result, List<ConversionJob> jobs) {
     target.cropY = result.cropY;
     target.cropWidth = result.cropWidth;
     target.cropHeight = result.cropHeight;
+    target.playbackSpeed = result.playbackSpeed;
     if (target.status == ConversionJobStatus.done ||
         target.status == ConversionJobStatus.error) {
       target.status = ConversionJobStatus.pending;
@@ -50,6 +51,7 @@ void main() {
         expect(job.cropY, 50);
         expect(job.cropWidth, 640);
         expect(job.cropHeight, 480);
+        expect(job.playbackSpeed, 1.0);
       }
     });
 
@@ -133,6 +135,23 @@ void main() {
       expect(jobs[0].status, ConversionJobStatus.pending);
       expect(jobs[1].status, ConversionJobStatus.converting);
       expect(jobs[1].progress, 0.5);
+    });
+
+    test('applies playback speed to all jobs', () {
+      final jobs = [
+        ConversionJob(inputPath: '/a.mp4'),
+        ConversionJob(inputPath: '/b.mp4'),
+      ];
+
+      const result = VideoEditResult(
+        playbackSpeed: 1.8,
+        applyToAll: true,
+      );
+
+      applyResult(result, jobs);
+      for (final job in jobs) {
+        expect(job.playbackSpeed, 1.8);
+      }
     });
   });
 

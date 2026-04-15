@@ -179,6 +179,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
           target.cropY = result.cropY;
           target.cropWidth = result.cropWidth;
           target.cropHeight = result.cropHeight;
+          target.playbackSpeed = result.playbackSpeed;
           if (target.status == ConversionJobStatus.done ||
               target.status == ConversionJobStatus.error) {
             target.status = ConversionJobStatus.pending;

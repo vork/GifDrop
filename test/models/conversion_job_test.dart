@@ -15,6 +15,7 @@ void main() {
       expect(job.cropY, isNull);
       expect(job.cropWidth, isNull);
       expect(job.cropHeight, isNull);
+      expect(job.playbackSpeed, 1.0);
     });
 
     test('hasTrim is true when trimStartFrame is set', () {
