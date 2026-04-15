@@ -105,7 +105,7 @@ jobs:
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -encoders | tee ffmpeg-encoders.txt
-          if ! grep -Eq "^[[:space:]]*V\\.[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
+          if ! grep -Eq "^[[:space:]]*V[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
@@ -387,7 +387,7 @@ jobs:
             fi
           done
           ./ffmpeg-install/bin/ffmpeg -hide_banner -encoders | tee ffmpeg-encoders.txt
-          if ! grep -Eq "^[[:space:]]*V\\.[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
+          if ! grep -Eq "^[[:space:]]*V[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
@@ -558,7 +558,7 @@ jobs:
             fi
           done
           ./ffmpeg-install/bin/ffmpeg.exe -hide_banner -encoders | tee ffmpeg-encoders.txt
-          if ! grep -Eq "^[[:space:]]*V\\.[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
+          if ! grep -Eq "^[[:space:]]*V[^[:space:]]*[[:space:]]+png([[:space:]]|$)" ffmpeg-encoders.txt; then
             echo "Required png encoder is missing from ffmpeg build"
             exit 1
           fi
