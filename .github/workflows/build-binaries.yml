@@ -222,12 +222,12 @@ jobs:
 
           # Sign bundled CLI tools and shared libraries with hardened runtime
           # ffmpeg needs allow-unsigned-executable-memory for JIT SIMD decoding
-          # libgifski needs disable-library-validation to load from Resources
+          # libgifski needs disable-library-validation to load from Frameworks
           codesign --force --options runtime \
             --sign "$CERT_NAME" \
             --entitlements "$ENTITLEMENTS" \
-            "$APP_NAME/Contents/Resources/ffmpeg" \
-            "$APP_NAME/Contents/Resources/libgifski.dylib"
+            "$APP_NAME/Contents/Helpers/ffmpeg" \
+            "$APP_NAME/Contents/Frameworks/libgifski.dylib"
 
           # Sign all embedded frameworks and dylibs
           find "$APP_NAME/Contents/Frameworks" -type f \( -name "*.dylib" -o -perm +111 \) | while read lib; do
@@ -274,6 +274,8 @@ jobs:
 
           # Staple the notarization ticket to the app
           xcrun stapler staple "$APP_NAME"
+          xcrun stapler validate "$APP_NAME"
+          spctl -a -vvv --type exec "$APP_NAME"
 
           rm -f notarize-upload.zip
 
@@ -282,11 +284,22 @@ jobs:
         run: |
           cd build/macos/Build/Products/Release
           APP_NAME=$(ls -d *.app | head -1)
+          FFMPEG_PATH="$APP_NAME/Contents/Helpers/ffmpeg"
+          GIFSKI_PATH="$APP_NAME/Contents/Frameworks/libgifski.dylib"
           echo "Found app: $APP_NAME"
-          ls -la "$APP_NAME/Contents/Resources/ffmpeg" \
-                 "$APP_NAME/Contents/Resources/libgifski.dylib"
-          "$APP_NAME/Contents/Resources/ffmpeg" -version 2>&1 | head -1
-          file "$APP_NAME/Contents/Resources/libgifski.dylib"
+          ls -la "$FFMPEG_PATH" "$GIFSKI_PATH"
+          "$FFMPEG_PATH" -version 2>&1 | head -1
+          "$FFMPEG_PATH" -hide_banner \
+            -i "$GITHUB_WORKSPACE/web/favicon.png" \
+            -vframes 1 -c:v png -f image2 -y ffmpeg-bundle-smoke.png
+          test -s ffmpeg-bundle-smoke.png
+          file "$GIFSKI_PATH"
+          python3 - <<PY
+          import ctypes
+          path = r"""$GIFSKI_PATH"""
+          ctypes.CDLL(path)
+          print("Loaded libgifski:", path)
+          PY
           ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" \
                 GifDrop-macos-arm64.zip
 

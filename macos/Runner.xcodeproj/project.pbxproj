@@ -412,12 +412,12 @@
 			);
 			name = "Copy Binaries";
 			outputPaths = (
-				"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/ffmpeg",
-				"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/libgifski.dylib",
+				"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Helpers/ffmpeg",
+				"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Frameworks/libgifski.dylib",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Copy bundled ffmpeg and libgifski into the app bundle\nRESOURCES_SRC=\"${SRCROOT}/Runner/Resources\"\nRESOURCES_DST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources\"\n\nif [ -f \"${RESOURCES_SRC}/ffmpeg\" ]; then\n  cp \"${RESOURCES_SRC}/ffmpeg\" \"${RESOURCES_DST}/ffmpeg\"\n  chmod +x \"${RESOURCES_DST}/ffmpeg\"\n  echo \"Copied bundled ffmpeg\"\nelse\n  echo \"warning: No bundled ffmpeg found at ${RESOURCES_SRC}/ffmpeg - will fall back to system ffmpeg\"\nfi\n\nif [ -f \"${RESOURCES_SRC}/libgifski.dylib\" ]; then\n  cp \"${RESOURCES_SRC}/libgifski.dylib\" \"${RESOURCES_DST}/libgifski.dylib\"\n  echo \"Copied bundled libgifski.dylib\"\nelse\n  echo \"warning: No bundled libgifski.dylib found at ${RESOURCES_SRC}/libgifski.dylib - will fall back to system library\"\nfi\n";
+			shellScript = "# Copy bundled ffmpeg and libgifski into the app bundle\nRESOURCES_SRC=\"${SRCROOT}/Runner/Resources\"\nHELPERS_DST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Helpers\"\nFRAMEWORKS_DST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Frameworks\"\n\nmkdir -p \"${HELPERS_DST}\" \"${FRAMEWORKS_DST}\"\n\nif [ -f \"${RESOURCES_SRC}/ffmpeg\" ]; then\n  cp \"${RESOURCES_SRC}/ffmpeg\" \"${HELPERS_DST}/ffmpeg\"\n  chmod +x \"${HELPERS_DST}/ffmpeg\"\n  echo \"Copied bundled ffmpeg\"\nelse\n  echo \"warning: No bundled ffmpeg found at ${RESOURCES_SRC}/ffmpeg\"\nfi\n\nif [ -f \"${RESOURCES_SRC}/libgifski.dylib\" ]; then\n  cp \"${RESOURCES_SRC}/libgifski.dylib\" \"${FRAMEWORKS_DST}/libgifski.dylib\"\n  echo \"Copied bundled libgifski.dylib\"\nelse\n  echo \"warning: No bundled libgifski.dylib found at ${RESOURCES_SRC}/libgifski.dylib\"\nfi\n";
 		};
 		A9EA747517EA634B7A137CA0 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

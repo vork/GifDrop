@@ -1,7 +1,9 @@
 # Bundled binaries for macOS
 
 Place **ffmpeg** and **libgifski.dylib** here. The Xcode build phase copies them
-into the app bundle so end users don't need to install anything.
+into the app bundle in code-appropriate locations:
+- `ffmpeg` -> `Contents/Helpers/ffmpeg`
+- `libgifski.dylib` -> `Contents/Frameworks/libgifski.dylib`
 
 ## Preferred: download from CI
 

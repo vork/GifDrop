@@ -6,7 +6,7 @@ class BinaryResolver {
     final execDir = p.dirname(Platform.resolvedExecutable);
 
     if (Platform.isMacOS) {
-      return p.join(execDir, '..', 'Resources', binaryName);
+      return p.join(execDir, '..', 'Helpers', binaryName);
     } else if (Platform.isWindows) {
       return p.join(execDir, 'data', '$binaryName.exe');
     } else {

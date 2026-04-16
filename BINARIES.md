@@ -39,7 +39,8 @@ the library/CLI is MIT. No source distribution requirements.
 
 | Platform    | ffmpeg                              | libgifski                                     |
 |-------------|-------------------------------------|-----------------------------------------------|
-| **macOS**   | `macos/Runner/Resources/ffmpeg`     | `macos/Runner/Resources/libgifski.dylib`      |
+| **macOS (source in repo)** | `macos/Runner/Resources/ffmpeg` | `macos/Runner/Resources/libgifski.dylib` |
+| **macOS (inside .app)** | `Contents/Helpers/ffmpeg` | `Contents/Frameworks/libgifski.dylib` |
 | **Windows** | next to `.exe`: `data/ffmpeg.exe`   | next to `.exe`: `data/gifski.dll`             |
 | **Linux**   | next to executable: `lib/ffmpeg`    | next to executable: `lib/libgifski.so`        |
 
@@ -96,7 +97,8 @@ When placing binaries — whether from CI or a fallback source — always:
    file libgifski.dylib         # should show "Mach-O 64-bit dynamically linked shared library"
    ```
 4. **Record in CI logs** — the workflow does this automatically
-5. **Quarantine removal (macOS):** `xattr -cr ./ffmpeg ./libgifski.dylib`
+5. **macOS release validation:** `codesign --verify --deep --strict --verbose=2 <App>.app`
+6. **Gatekeeper validation (macOS):** `spctl -a -vvv --type exec <App>.app`
 
 ---
 

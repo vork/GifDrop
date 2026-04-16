@@ -16,7 +16,7 @@ class GifskiLibrary {
     String bundledPath;
 
     if (Platform.isMacOS) {
-      bundledPath = p.join(execDir, '..', 'Resources', 'libgifski.dylib');
+      bundledPath = p.join(execDir, '..', 'Frameworks', 'libgifski.dylib');
     } else if (Platform.isWindows) {
       bundledPath = p.join(execDir, 'data', 'gifski.dll');
     } else {
