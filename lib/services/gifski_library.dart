@@ -27,12 +27,10 @@ class GifskiLibrary {
       return DynamicLibrary.open(bundledPath);
     }
 
-    // Fall back to system library search
-    final name = Platform.isMacOS
-        ? 'libgifski.dylib'
-        : Platform.isWindows
-            ? 'gifski.dll'
-            : 'libgifski.so';
-    return DynamicLibrary.open(name);
+    throw Exception(
+      'Bundled gifski library not found at:\n'
+      '  $bundledPath\n'
+      'This app requires the bundled gifski library and will not use system library search.',
+    );
   }
 }
